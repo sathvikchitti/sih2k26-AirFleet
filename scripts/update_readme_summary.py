@@ -43,6 +43,11 @@ def _fmt(value: float, digits: int = 2) -> str:
     return f"{float(value):.{digits}f}"
 
 
+def _fmt_signed(value: float, digits: int = 2) -> str:
+    value = float(value)
+    return f"{value:+.{digits}f}"
+
+
 def render_lines() -> list[str]:
     metrics = _read_json(MODEL_METRICS)
     scale = _read_json(SCALE_REPORT)
@@ -56,38 +61,56 @@ def render_lines() -> list[str]:
             or scale.get("horizon_unit") != "hours"):
         raise SystemExit("Scale report does not match the expected synthetic evaluation contract")
 
-    proposed = _required(policies, "proposed")
-    nearest = _required(policies, "nearest_fcfs")
-    random_policy = _required(policies, "random_feasible")
-    local_only = _required(policies, "local_only_procurement")
+    _required(policies, "proposed")
+    _required(policies, "nearest_fcfs")
+    _required(policies, "random_feasible")
+    _required(policies, "local_only_procurement")
     paired = _required(scale, "comparison", "paired_deltas_vs_proposed")
-    deltas = [
+    nearest_deltas = [
         _required(paired, "nearest_fcfs", "time_weighted_availability_pct_points", "ci95"),
         _required(paired, "nearest_fcfs", "summed_censored_aircraft_hours_lost", "ci95"),
         _required(paired, "nearest_fcfs", "unserved_work_order_rate_pct_points", "ci95"),
     ]
-    intervals_include_zero = all(float(row["lower"]) <= 0 <= float(row["upper"]) for row in deltas)
-    if not intervals_include_zero:
+    nearest_intervals_include_zero = all(
+        float(row["lower"]) <= 0 <= float(row["upper"]) for row in nearest_deltas
+    )
+    if not nearest_intervals_include_zero:
         raise SystemExit("Nearest-policy paired intervals no longer support the generated README wording")
 
-    validation = _required(metrics, "validation", "random_forest")
+    local_availability = _required(
+        paired, "local_only_procurement", "time_weighted_availability_pct_points"
+    )
+    local_lost_hours = _required(
+        paired, "local_only_procurement", "summed_censored_aircraft_hours_lost"
+    )
+    # The JSON deltas are local-only minus proposed. Report proposed/Sharing minus
+    # local-only, including reversed paired interval endpoints, directly.
+    sharing_availability = -float(local_availability["mean"])
+    sharing_availability_ci = (
+        -float(local_availability["ci95"]["upper"]),
+        -float(local_availability["ci95"]["lower"]),
+    )
+    sharing_lost_days = -float(local_lost_hours["mean"]) / 24.0
+    sharing_lost_days_ci = (
+        -float(local_lost_hours["ci95"]["upper"]) / 24.0,
+        -float(local_lost_hours["ci95"]["lower"]) / 24.0,
+    )
+
     official_test = model
     sha = _required(metrics, "existing_artifact_reference", "artifact_sha256")
     if not isinstance(sha, str) or len(sha) != 64:
         raise SystemExit("Missing valid production artifact SHA-256 in metrics report")
 
-    availability_ci = _required(
-        paired, "nearest_fcfs", "time_weighted_availability_pct_points", "ci95"
-    )
     return [
         "- Problem: aircraft condition, maintenance, and spares records are fragmented, delaying readiness decisions.",
         "- Solution: an integrated FD001 RUL demo links model evidence to human-approved maintenance and resource workflows.",
         (f"- Measured: FD001 official-test MAE/RMSE {_fmt(_required(official_test, 'mae_cycles'))}/"
-         f"{_fmt(_required(official_test, 'rmse_cycles'))} cycles; production-policy availability "
-         f"{_fmt(proposed['mean_time_weighted_availability_pct'], 2)}% vs nearest-FCFS "
-         f"{_fmt(nearest['mean_time_weighted_availability_pct'], 2)}% across {scale['scenario_count']} paired scenarios "
-         f"(95% paired interval for the difference [{_fmt(availability_ci['lower'], 3)}, "
-         f"{_fmt(availability_ci['upper'], 3)}] percentage points)."),
+         f"{_fmt(_required(official_test, 'rmse_cycles'))} cycles; across {scale['scenario_count']} paired "
+         f"synthetic scenarios, Sharing minus local-only was {_fmt_signed(sharing_availability)} pp availability "
+         f"(95% paired CI {_fmt_signed(sharing_availability_ci[0])} to {_fmt_signed(sharing_availability_ci[1])}) "
+         f"and {_fmt_signed(sharing_lost_days)} censored aircraft-days lost "
+         f"(95% paired CI {_fmt_signed(sharing_lost_days_ci[0])} to {_fmt_signed(sharing_lost_days_ci[1])}); "
+         f"nearest-FCFS differences were inconclusive."),
         f"- Run locally: `.{chr(92)}run_demo.ps1` (Windows PowerShell) or `./run_demo.sh` (macOS/Linux).",
         "- Evidence is from NASA C-MAPSS and synthetic fleet scenarios; intervals are uncalibrated and results are not real-fleet performance.",
     ]

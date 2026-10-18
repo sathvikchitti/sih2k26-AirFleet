@@ -11,6 +11,80 @@ const intervalText = (mean, ci, digits = 2) => !isNumber(mean)
   : ci && isNumber(ci.lower) && isNumber(ci.upper)
     ? `${fixed(mean, digits)} (${fixed(ci.lower, digits)}–${fixed(ci.upper, digits)})`
     : `${fixed(mean, digits)} (CI unavailable)`;
+const signed = value => `${value > 0 ? '+' : value < 0 ? '−' : ''}${fixed(Math.abs(value))}`;
+
+export function pairedSharingEffect(delta, divisor = 1) {
+  const ci = delta?.ci95;
+  if (!isNumber(delta?.mean) || !isNumber(ci?.lower) || !isNumber(ci?.upper)
+    || ci.lower > ci.upper || !isNumber(divisor) || divisor <= 0) return null;
+  return {
+    mean: -delta.mean / divisor,
+    lower: -ci.upper / divisor,
+    upper: -ci.lower / divisor,
+  };
+}
+
+const intervalIncludesZero = delta => isNumber(delta?.ci95?.lower)
+  && isNumber(delta?.ci95?.upper)
+  && delta.ci95.lower <= 0
+  && delta.ci95.upper >= 0;
+
+export function EvaluationHeadline({ summary }) {
+  const comparison = summary?.comparison?.paired_deltas_vs_proposed || {};
+  const sharing = comparison.local_only_procurement || {};
+  const availability = pairedSharingEffect(sharing.time_weighted_availability_pct_points);
+  const aircraftDays = pairedSharingEffect(sharing.summed_censored_aircraft_hours_lost, 24);
+  const supportsImprovement = availability != null && aircraftDays != null
+    && availability.lower > 0 && aircraftDays.upper < 0;
+  const comparisonComplete = availability != null && aircraftDays != null;
+  const nearest = comparison.nearest_fcfs || {};
+  const nearestComparable = intervalIncludesZero(nearest.time_weighted_availability_pct_points)
+    && intervalIncludesZero(nearest.summed_censored_aircraft_hours_lost);
+  const nearestAvailable = isNumber(nearest.time_weighted_availability_pct_points?.mean)
+    && isNumber(nearest.summed_censored_aircraft_hours_lost?.mean)
+    && isNumber(nearest.time_weighted_availability_pct_points?.ci95?.lower)
+    && isNumber(nearest.time_weighted_availability_pct_points?.ci95?.upper)
+    && isNumber(nearest.summed_censored_aircraft_hours_lost?.ci95?.lower)
+    && isNumber(nearest.summed_censored_aircraft_hours_lost?.ci95?.upper);
+  const scenarioCount = [
+    sharing.time_weighted_availability_pct_points?.paired_sample_count,
+    sharing.summed_censored_aircraft_hours_lost?.paired_sample_count,
+  ].filter(isNumber);
+  const pairedCount = scenarioCount.length ? Math.min(...scenarioCount) : null;
+
+  return (
+    <div style={{ border: '1px solid #3a3020', borderRadius: 8, padding: 10, margin: '0 0 10px', background: '#11141a' }}>
+      <div style={{ color: '#f0c35a', fontSize: 13, fontWeight: 800, marginBottom: 5 }}>
+        Sharing spares across bases vs bases working alone
+      </div>
+      <div style={{ fontSize: 12, color: '#e6e9ee' }}>
+        {availability
+          ? `${signed(availability.mean)} availability points (paired 95% CI ${signed(availability.lower)} to ${signed(availability.upper)})`
+          : 'Availability effect unavailable'}
+        {'; '}
+        {aircraftDays
+          ? `${signed(aircraftDays.mean)} aircraft-days lost per scenario (paired 95% CI ${signed(aircraftDays.lower)} to ${signed(aircraftDays.upper)})`
+          : 'Aircraft-days-lost effect unavailable'}.
+      </div>
+      {pairedCount != null ? <div style={{ fontSize: 10, color: '#8b94a3', marginTop: 4 }}>Paired comparison across {pairedCount} synthetic scenarios; hours converted to 24-hour aircraft-days.</div> : null}
+      <div style={{ fontSize: 11, color: '#c6ccd6', marginTop: 8 }}>
+        <b>What this means:</b> {supportsImprovement
+          ? 'In this synthetic benchmark, the paired intervals support improved modeled readiness and fewer aircraft-days lost when sharing is allowed versus local-only procurement.'
+          : comparisonComplete
+            ? 'The paired intervals do not support a clear improvement on both readiness and aircraft-days lost versus local-only procurement.'
+            : 'The paired comparison is incomplete; no improvement claim is made versus local-only procurement.'}
+        {' '}The result depends on the simulation’s stock, demand, and procurement assumptions. It does not establish that production ranking outperforms nearest-feasible selection; source condition, reserves, and donor impact remain ranking constraints.
+      </div>
+      <div role="status" style={{ fontSize: 11, color: '#8b94a3', marginTop: 6 }}>
+        {nearestComparable
+          ? 'Production ranking vs nearest-feasible: no distinguishable difference in these scenarios; paired 95% intervals include zero for availability and aircraft-hours lost.'
+          : nearestAvailable
+            ? 'Production ranking vs nearest-feasible: at least one paired interval excludes zero; review the paired deltas below. No overall winner is declared.'
+            : 'Production ranking vs nearest-feasible: paired comparison unavailable; no difference claim is made.'}
+      </div>
+    </div>
+  );
+}
 
 const LABELS = {
   proposed: 'Production ranking',
@@ -96,6 +170,7 @@ export function EvaluationResults({ summary }) {
         <span>· {summary.horizon_hours ?? '—'} {summary.horizon_unit || 'hours'}</span>
         {summary.scenario_fingerprint ? <span title={summary.scenario_fingerprint}>· Snapshot {String(summary.scenario_fingerprint).slice(0, 12)}</span> : null}
       </div>
+      <EvaluationHeadline summary={summary} />
       <div style={{ fontSize: 11, color: '#8b94a3', marginBottom: 10 }}>
         Seeded scenario simulation only; results do not claim real operational performance. 95% percentile bootstrap intervals are over synthetic scenario units. No policy is declared a winner.
       </div>

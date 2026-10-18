@@ -3,7 +3,7 @@
 <!-- GENERATED EVIDENCE SUMMARY START -->
 - Problem: aircraft condition, maintenance, and spares records are fragmented, delaying readiness decisions.
 - Solution: an integrated FD001 RUL demo links model evidence to human-approved maintenance and resource workflows.
-- Measured: FD001 official-test MAE/RMSE 13.79/18.70 cycles; production-policy availability 84.27% vs nearest-FCFS 84.27% across 300 paired scenarios (95% paired interval for the difference [-0.019, 0.015] percentage points).
+- Measured: FD001 official-test MAE/RMSE 13.79/18.70 cycles; across 300 paired synthetic scenarios, Sharing minus local-only was +5.05 pp availability (95% paired CI +4.85 to +5.24) and -4.04 censored aircraft-days lost (95% paired CI -4.19 to -3.89); nearest-FCFS differences were inconclusive.
 - Run locally: `.\run_demo.ps1` (Windows PowerShell) or `./run_demo.sh` (macOS/Linux).
 - Evidence is from NASA C-MAPSS and synthetic fleet scenarios; intervals are uncalibrated and results are not real-fleet performance.
 <!-- GENERATED EVIDENCE SUMMARY END -->

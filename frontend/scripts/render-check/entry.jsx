@@ -30,7 +30,7 @@ import LogisticsBasesView from '../../src/pages/views/LogisticsBasesView.jsx';
 import Commander from '../../src/pages/Commander.jsx';
 import { BaseMissionReadiness, MissionReadinessBand } from '../../src/pages/Commander.jsx';
 import ResourceForecastPanel, { DemandStockChart, ForecastEligibilityNotice, SuggestedMoveRow } from '../../src/components/ResourceForecastPanel.jsx';
-import { EvaluationIntervalChart, EvaluationResults } from '../../src/components/EvaluationSummaryPanel.jsx';
+import { EvaluationHeadline, EvaluationIntervalChart, EvaluationResults, pairedSharingEffect } from '../../src/components/EvaluationSummaryPanel.jsx';
 import BaseManager from '../../src/pages/BaseManager.jsx';
 import Logistics from '../../src/pages/Logistics.jsx';
 import { compareTimeWeightedAvailability } from '../../src/components/ReadinessSimulationPanel.jsx';
@@ -257,6 +257,71 @@ const evaluationFixture = {
 const evaluationHtml = renderToString(React.createElement(EvaluationResults, { summary: evaluationFixture }));
 const unsafeEvaluationHtml = renderToString(React.createElement(EvaluationResults, { summary: { ...evaluationFixture, real_operational_performance_claimed: true } }));
 const evaluationPolicyOrder = ['Production ranking', 'Nearest feasible, first-come-first-served', 'Random feasible source', 'Local stock / procurement only'];
+const pairedHeadlineFixture = {
+  ...evaluationFixture,
+  // Deliberately conflicting marginal means: the headline must use paired deltas.
+  policies: {
+    ...evaluationFixture.policies,
+    proposed: { ...evaluationFixture.policies.proposed, mean_time_weighted_availability_pct: 60 },
+    local_only_procurement: { ...evaluationFixture.policies.local_only_procurement, mean_time_weighted_availability_pct: 60 },
+  },
+  comparison: {
+    reference_policy: 'proposed',
+    paired_deltas_vs_proposed: {
+      local_only_procurement: {
+        time_weighted_availability_pct_points: { mean: -4.5, ci95: { lower: -5.2, upper: -3.8 }, paired_sample_count: 300 },
+        summed_censored_aircraft_hours_lost: { mean: 96, ci95: { lower: 90, upper: 102 }, paired_sample_count: 300 },
+      },
+      nearest_fcfs: {
+        time_weighted_availability_pct_points: { mean: 0.01, ci95: { lower: -0.1, upper: 0.2 }, paired_sample_count: 300 },
+        summed_censored_aircraft_hours_lost: { mean: 0.2, ci95: { lower: -1, upper: 1 }, paired_sample_count: 300 },
+      },
+    },
+  },
+};
+const pairedHeadlineHtml = renderToString(React.createElement(EvaluationHeadline, { summary: pairedHeadlineFixture }));
+const missingPairHeadlineHtml = renderToString(React.createElement(EvaluationHeadline, {
+  summary: { comparison: { paired_deltas_vs_proposed: { nearest_fcfs: { time_weighted_availability_pct_points: { mean: 0, ci95: null } } } } },
+}));
+const nonzeroNearestHeadlineHtml = renderToString(React.createElement(EvaluationHeadline, {
+  summary: { comparison: { paired_deltas_vs_proposed: { nearest_fcfs: {
+    time_weighted_availability_pct_points: { mean: 1, ci95: { lower: 0.5, upper: 1.5 } },
+    summed_censored_aircraft_hours_lost: { mean: 0, ci95: { lower: -1, upper: 1 } },
+  } } } },
+}));
+const pairedEffect = pairedSharingEffect({ mean: 96, ci95: { lower: 90, upper: 102 } }, 24);
+const unsupportedImprovementHtml = renderToString(React.createElement(EvaluationHeadline, {
+  summary: { comparison: { paired_deltas_vs_proposed: {
+    local_only_procurement: {
+      time_weighted_availability_pct_points: { mean: -0.1, ci95: { lower: -0.5, upper: 0.2 } },
+      summed_censored_aircraft_hours_lost: { mean: 96, ci95: { lower: 90, upper: 102 } },
+    },
+  } } },
+}));
+const invalidBoundsHeadlineHtml = renderToString(React.createElement(EvaluationHeadline, {
+  summary: { comparison: { paired_deltas_vs_proposed: {
+    local_only_procurement: {
+      time_weighted_availability_pct_points: { mean: -1, ci95: { lower: 2, upper: 1 } },
+      summed_censored_aircraft_hours_lost: { mean: 0, ci95: { lower: 2, upper: 1 } },
+    },
+  } } },
+}));
+if (pairedEffect?.mean !== -4 || pairedEffect.lower !== -4.25 || pairedEffect.upper !== -3.75
+  || pairedSharingEffect({ mean: -1, ci95: { lower: 2, upper: 1 } }) !== null
+  || !pairedHeadlineHtml.includes('+4.50 availability points (paired 95% CI +3.80 to +5.20)')
+  || !pairedHeadlineHtml.includes('−4.00 aircraft-days lost per scenario (paired 95% CI −4.25 to −3.75)')
+  || !pairedHeadlineHtml.includes('no distinguishable difference in these scenarios')
+  || pairedHeadlineHtml.includes('−0.00 aircraft-days')
+  || !missingPairHeadlineHtml.includes('no difference claim is made')
+  || missingPairHeadlineHtml.includes('no distinguishable difference in these scenarios')
+  || !nonzeroNearestHeadlineHtml.includes('at least one paired interval excludes zero')
+  || !unsupportedImprovementHtml.includes('do not support a clear improvement')
+  || unsupportedImprovementHtml.includes('paired intervals support improved modeled readiness')
+  || !invalidBoundsHeadlineHtml.includes('no improvement claim is made')
+  || !invalidBoundsHeadlineHtml.includes('Availability effect unavailable')) {
+  throw new Error('Evaluation headline should derive sign and reversed CI bounds from paired deltas, guard missing intervals, and qualify nearest-policy claims');
+}
+console.log('  PASS  paired evaluation headline sign, CI order, null handling, and nearest-policy qualification');
 if (!evaluationHtml.includes('SYNTHETIC SIMULATION')
   || !evaluationHtml.includes('95% percentile bootstrap intervals are over synthetic scenario units')
   || !evaluationHtml.includes('No policy is declared a winner')

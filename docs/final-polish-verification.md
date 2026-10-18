@@ -102,6 +102,41 @@ node --test scripts/prediction-contract.test.mjs
 
 The focused route test checks that forecast GET leaves the repository snapshot unchanged, Commander is denied transfer creation without state changes, and Logistics can create a pending transfer request without moving stock. The frontend refreshes the forecast after a requested move; creation remains a manual action and does not automatically approve or dispatch the transfer.
 
+## Task 4 — paired README comparison
+
+The generated five-line summary now reports Sharing-minus-local-only paired effects from the simulation's paired-delta JSON, not a subtraction of policy marginal means. It reverses the local-only-minus-proposed delta and its confidence-interval endpoints, and converts summed aircraft-hours to aggregate aircraft-days by dividing by 24. A bounded comparison helper test checks the sign and interval transformation. The frontend evaluation headline uses the same paired convention, reports a distinction only when the relevant paired intervals support it, and displays unavailable when intervals are absent.
+
+Measured values from the existing 300-scenario report: Sharing-minus-local-only availability was +5.05 percentage points (95% paired CI +4.85 to +5.24); aggregate censored aircraft-days lost were −4.04 (95% paired CI −4.19 to −3.89). Sharing versus nearest-FCFS has no distinguishable difference in these scenarios because its paired intervals include zero. No model training, scenario rerun, ranking change, or model/simulation JSON update was made for this summary change.
+
+Verification outputs:
+
+```text
+README generator (from repository root):
+python scripts/update_readme_summary.py
+updated the five-line generated summary from the existing JSON reports
+
+python scripts/update_readme_summary.py --check
+README evidence summary is current.
+
+Focused generator test (from repository root):
+python -m pytest backend/tests/test_readme_summary.py -q
+1 passed in 0.04s
+
+Backend full (from backend/):
+python -m pytest tests -q --ignore=tests/test_api_compat.py --basetemp .pytest-tmp-task4-full
+254 passed in 110.57s
+
+Frontend (from frontend/):
+npm run verify:views
+19/19 views passed
+
+npm run build
+passed (56 modules)
+
+node --test scripts/prediction-contract.test.mjs
+3/3 passed
+```
+
 ## Initial read-only investigation for Tasks 3–7
 
 The initial inspection was read-only. The production FD001 model SHA-256 is `14114389BC8DC09449CDE646F9B582933B58FFA188F3955508CC2F3E87D30BE9`.
