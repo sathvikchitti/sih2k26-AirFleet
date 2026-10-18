@@ -28,6 +28,7 @@ from app.services.recommendation_service import evaluate_candidates
 def fd001_operations(monkeypatch):
     monkeypatch.setenv("ML_PROVIDER", "fd001")
     monkeypatch.setenv("DEMO_SCENARIO", "fd001_operations")
+    monkeypatch.delenv("FD001_ENGINE_PART_MAPPING", raising=False)
     set_provider(None)
     main.initialize_demo_state()
     yield
@@ -227,6 +228,91 @@ def test_scenario_api_exposes_ui_inputs_and_reset_role_is_enforced(fd001_operati
         assert after_reset[:6] == before_reset[:6]
         assert after_reset[6][-1][1] == "DEMO_RESET"
         assert sum(row[1] == "DEMO_RESET" for row in after_reset[6]) == 1
+
+
+def test_default_mapping_forecast_suggestion_is_readonly_and_logistics_can_request_it(
+        fd001_operations):
+    from fastapi.testclient import TestClient
+
+    before_forecast = snapshot()
+    with TestClient(main.app) as client:
+        response = client.get("/api/resources/forecast?horizon_cycles=60")
+        assert response.status_code == 200
+        forecast = response.json()
+
+        assert forecast["forecast_status"] == "available"
+        assert forecast["horizon_cycles"] == 60
+        assert forecast["mapping"]["label"] == "assumed mapping for demo"
+        assert forecast["mapping"]["source"] == "built_in_demo_assumption"
+        assert forecast["mapping"]["engine_to_component"] == {
+            str(engine_id): "HP-204" if engine_id % 2 else "OE-310"
+            for engine_id in range(1, 11)
+        }
+        assert forecast["suggested_moves"]
+        assert forecast["mutated_state"] is False
+
+        # Every suggestion must fit the same frozen post-commitment, reserve,
+        # condition, and forecast-protection ledger used by the API.
+        component_rows = {
+            (base["base_id"], component["component"]): component
+            for base in forecast["bases"]
+            for component in base["components"]
+        }
+        proposed_by_donor = {}
+        for move in forecast["suggested_moves"]:
+            assert move["feasible"] is True
+            assert move["action"] == "create_transfer"
+            assert move["quantity"] >= 1
+            assert move["condition_pct"] >= move["min_condition_pct"]
+            key = (move["source_base"], move["part_number"])
+            proposed_by_donor[key] = proposed_by_donor.get(key, 0) + move["quantity"]
+        for key, total_suggested in proposed_by_donor.items():
+            source = component_rows[key]
+            remaining_after_forecast_protection = max(
+                0,
+                source["committed_available_for_transfer"]
+                - source["forecast_protected_units"],
+            )
+            assert total_suggested <= remaining_after_forecast_protection
+
+        assert snapshot() == before_forecast
+
+        move = forecast["suggested_moves"][0]
+        transfer_request = {
+            "part_number": move["part_number"],
+            "source_base": move["source_base"],
+            "dest_base": move["destination_base"],
+            "quantity": move["quantity"],
+            "actor": "logistics",
+        }
+        before_denied = snapshot()
+        denied = client.post(
+            "/api/transfers", json=transfer_request,
+            headers={"X-Demo-Role": "commander"},
+        )
+        assert denied.status_code == 403
+        assert snapshot() == before_denied
+
+        before_created = snapshot()
+        created = client.post(
+            "/api/transfers", json=transfer_request,
+            headers={"X-Demo-Role": "logistics"},
+        )
+        assert created.status_code == 200
+        transfer = created.json()
+        assert transfer["status"] == "PENDING_APPROVAL"
+        assert transfer["part_number"] == move["part_number"]
+        assert transfer["source_base"] == move["source_base"]
+        assert transfer["dest_base"] == move["destination_base"]
+        assert transfer["quantity"] == move["quantity"]
+
+        after_created = snapshot()
+        assert after_created["inventory"] == before_created["inventory"]
+        assert after_created["work_orders"] == before_created["work_orders"]
+        assert after_created["predicted_events"] == before_created["predicted_events"]
+        assert after_created["transfers"][:-1] == before_created["transfers"]
+        assert after_created["transfers"][-1]["id"] == transfer["id"]
+        assert len(after_created["audit"]) == len(before_created["audit"]) + 1
 
 
 def test_clean_fd001_reset_remains_separate_from_operations_fixture(monkeypatch):

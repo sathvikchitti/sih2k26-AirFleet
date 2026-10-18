@@ -29,7 +29,7 @@ import MaintenanceResourcesView from '../../src/pages/views/MaintenanceResources
 import LogisticsBasesView from '../../src/pages/views/LogisticsBasesView.jsx';
 import Commander from '../../src/pages/Commander.jsx';
 import { BaseMissionReadiness, MissionReadinessBand } from '../../src/pages/Commander.jsx';
-import ResourceForecastPanel, { DemandStockChart, ForecastEligibilityNotice } from '../../src/components/ResourceForecastPanel.jsx';
+import ResourceForecastPanel, { DemandStockChart, ForecastEligibilityNotice, SuggestedMoveRow } from '../../src/components/ResourceForecastPanel.jsx';
 import { EvaluationIntervalChart, EvaluationResults } from '../../src/components/EvaluationSummaryPanel.jsx';
 import BaseManager from '../../src/pages/BaseManager.jsx';
 import Logistics from '../../src/pages/Logistics.jsx';
@@ -203,6 +203,31 @@ for (const cycle of [30, 60, 100]) {
   }
 }
 console.log('  PASS  forecast horizon default/quick-select and backend-suggested empty state');
+
+const suggestedMove = { source_base: 'alpha', destination_base: 'bravo', quantity: 1, eta_hours: 4.3, distance_km: 260, condition_pct: 84, feasible: true };
+const suggestedMoveRow = { base_id: 'bravo', component: 'HP-204' };
+const logisticsMoveHtml = renderToString(React.createElement(SuggestedMoveRow, {
+  move: suggestedMove, row: suggestedMoveRow, canRequestMove: true, onRequest: noop,
+}));
+const commanderMoveHtml = renderToString(React.createElement(SuggestedMoveRow, {
+  move: suggestedMove, row: suggestedMoveRow, canRequestMove: false, onRequest: noop,
+}));
+const infeasibleMoveHtml = renderToString(React.createElement(SuggestedMoveRow, {
+  move: { ...suggestedMove, feasible: false }, row: suggestedMoveRow, canRequestMove: true, onRequest: noop,
+}));
+const invalidQuantityMoveHtml = renderToString(React.createElement(SuggestedMoveRow, {
+  move: { ...suggestedMove, quantity: 1.5 }, row: suggestedMoveRow, canRequestMove: true, onRequest: noop,
+}));
+if (!logisticsMoveHtml.includes('Base Alpha') || !logisticsMoveHtml.includes('Base Bravo')
+  || !logisticsMoveHtml.includes('1 unit') || !logisticsMoveHtml.includes('4.3h')
+  || !logisticsMoveHtml.includes('condition 84%') || !logisticsMoveHtml.includes('Create transfer')
+  || /disabled(?:="")?/.test(logisticsMoveHtml)
+  || !commanderMoveHtml.includes('Logistics role required') || !/disabled(?:="")?/.test(commanderMoveHtml)
+  || !infeasibleMoveHtml.includes('not marked feasible') || !/disabled(?:="")?/.test(infeasibleMoveHtml)
+  || !invalidQuantityMoveHtml.includes('quantity unavailable') || !/disabled(?:="")?/.test(invalidQuantityMoveHtml)) {
+  throw new Error('Suggested transfers should show their backend route and only enable whole-unit feasible requests for Logistics');
+}
+console.log('  PASS  suggested transfer rendering and Logistics/feasibility action guards');
 
 const evaluationFixture = {
   evaluation_type: 'deterministic_synthetic_simulation',

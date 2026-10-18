@@ -94,6 +94,27 @@ export function ForecastHorizonControls({ horizon, onHorizonChange, disabled = f
   );
 }
 
+export function SuggestedMoveRow({ move, row, canRequestMove, busy = false, pending = false, onRequest }) {
+  const validQuantity = Number.isInteger(move?.quantity) && move.quantity > 0;
+  const feasible = move?.feasible === true && validQuantity;
+  const disabled = !canRequestMove || !feasible || busy;
+  const key = `${row.base_id}:${row.component}:${move?.source_base}:${move?.destination_base}`;
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8, borderTop: '1px solid #2a3444', paddingTop: 6, fontSize: 11 }}>
+      <span>{baseName(move?.source_base)} → {baseName(move?.destination_base)} · {validQuantity ? `${move.quantity} unit${move.quantity === 1 ? '' : 's'}` : 'quantity unavailable'} · ETA {isNumber(move?.eta_hours) ? `${move.eta_hours}h` : '—'}{isNumber(move?.condition_pct) ? ` · condition ${move.condition_pct}%` : ''}</span>
+      <button
+        type="button"
+        disabled={disabled}
+        title={!canRequestMove ? 'Transfer requests are available in the Logistics demo role.' : !feasible ? 'This move is not marked feasible by the backend.' : undefined}
+        onClick={() => onRequest?.(move, row)}
+        style={{ background: '#1c2431', border: '1px solid #2a3444', color: canRequestMove && feasible ? '#e6e9ee' : '#8b94a3', borderRadius: 6, padding: '4px 9px', cursor: !disabled ? 'pointer' : 'not-allowed', fontSize: 11, opacity: !disabled ? 1 : 0.65 }}
+      >
+        {pending ? 'Creating…' : canRequestMove ? 'Create transfer' : 'Logistics role required'}
+      </button>
+    </div>
+  );
+}
+
 export default function ResourceForecastPanel({ canRequestMove = false, refreshKey = 0, onRefresh }) {
   const [horizon, setHorizon] = React.useState(String(DEFAULT_FORECAST_HORIZON));
   const [forecast, setForecast] = React.useState(null);
@@ -219,17 +240,8 @@ export default function ResourceForecastPanel({ canRequestMove = false, refreshK
                       </div>
                       {moves.length > 0 && <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 5 }}>
                         {moves.map((move, moveIndex) => {
-                          const validQuantity = Number.isInteger(move.quantity) && move.quantity > 0;
-                          const eligible = move.feasible === true && validQuantity;
                           const key = `${row.base_id}:${row.component}:${move.source_base}:${move.destination_base}`;
-                          return (
-                            <div key={`${key}:${moveIndex}`} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8, borderTop: '1px solid #2a3444', paddingTop: 6, fontSize: 11 }}>
-                              <span>{baseName(move.source_base)} → {baseName(move.destination_base)} · {validQuantity ? `${move.quantity} unit${move.quantity === 1 ? '' : 's'}` : 'quantity unavailable'} · ETA {isNumber(move.eta_hours) ? `${move.eta_hours}h` : '—'}{isNumber(move.condition_pct) ? ` · condition ${move.condition_pct}%` : ''}</span>
-                              <button type="button" disabled={!canRequestMove || !eligible || Boolean(busyMove)} title={!canRequestMove ? 'Transfer requests are available in the Logistics demo role.' : !eligible ? 'This move is not marked feasible by the backend.' : undefined} onClick={() => requestMove(move, row)} style={{ background: '#1c2431', border: '1px solid #2a3444', color: canRequestMove && eligible ? '#e6e9ee' : '#8b94a3', borderRadius: 6, padding: '4px 9px', cursor: canRequestMove && eligible && !busyMove ? 'pointer' : 'not-allowed', fontSize: 11, opacity: canRequestMove && eligible && !busyMove ? 1 : 0.65 }}>
-                                {busyMove === key ? 'Requesting…' : canRequestMove ? 'Request transfer' : 'Logistics role required'}
-                              </button>
-                            </div>
-                          );
+                          return <SuggestedMoveRow key={`${key}:${moveIndex}`} move={move} row={row} canRequestMove={canRequestMove} busy={Boolean(busyMove)} pending={busyMove === key} onRequest={requestMove} />;
                         })}
                       </div>}
                     </div>

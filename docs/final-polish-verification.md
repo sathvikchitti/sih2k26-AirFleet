@@ -72,6 +72,36 @@ node --test scripts/prediction-contract.test.mjs
 
 Read-only isolated-process forecast probe at the default 60-cycle horizon, using the new map and the synthetic FD001 operations fixture, found 2 eligible predictions and 7 outside the horizon. It proposed one feasible `HP-204` move from Charlie to Bravo (one unit, 260 km, 4.3 h ETA); Bravo's HP-204 demand was 0.1781 with a unit at its minimum reserve and shortfall 1. Charlie's `OE-310` demand was 0.4215 with quantity 3, minimum reserve 3, and no transferable stock. Charlie's HP-204 stock was quantity 1, reserved 0, minimum reserve 0, and transferable 1 before the suggestion; the cloned ledger debited that single proposed unit, leaving 0 afterward. No real inventory was changed. This is a deterministic demo forecast, not evidence that the map is valid for operational aircraft.
 
+## Task 3 — first useful forecast move in the default demo
+
+No scenario inventory or fixture values were changed. The Task 2 alternating map exposed a feasible default-horizon forecast proposal using the existing shared stock and reserve rules. The read-only forecast does not reserve stock or create transfers. A Logistics request is a separate `POST /api/transfers` action that creates a pending request; approval/dispatch and receipt remain distinct workflow steps. The operations guide now includes the exact request body/header example and records that current stock must be rechecked before submission.
+
+Measured probe at 60 cycles: 2 eligible predictions, 7 outside horizon, and one proposed HP-204 unit from Charlie to Bravo, with estimated 4.3 h ETA and 260 km distance. Bravo's expected HP-204 demand was 0.1781; its one unit was at minimum reserve, with projected shortfall 1. Charlie's HP-204 stock was quantity 1, reserved 0, minimum reserve 0, and transferable 1 before the proposal, then transferable 0 in the cloned preview after the virtual debit. Charlie's OE-310 expected demand was 0.4215 with quantity 3 at minimum reserve 3 and no transferable units. These are synthetic forecast values, not predicted component failures or real logistics performance.
+
+Verification outputs:
+
+```text
+Backend focused (from backend/):
+python -m pytest tests/test_fd001_operations_scenario.py -q --basetemp .pytest-tmp-task3-focused
+6 passed in 95.14s
+
+Backend full (from backend/):
+python -m pytest tests -q --ignore=tests/test_api_compat.py --basetemp .pytest-tmp-task3-full
+253 passed in 110.51s
+
+Frontend (from frontend/):
+npm run build
+passed (56 modules)
+
+npm run verify:views
+19/19 views passed
+
+node --test scripts/prediction-contract.test.mjs
+3/3 passed
+```
+
+The focused route test checks that forecast GET leaves the repository snapshot unchanged, Commander is denied transfer creation without state changes, and Logistics can create a pending transfer request without moving stock. The frontend refreshes the forecast after a requested move; creation remains a manual action and does not automatically approve or dispatch the transfer.
+
 ## Initial read-only investigation for Tasks 3–7
 
 The initial inspection was read-only. The production FD001 model SHA-256 is `14114389BC8DC09449CDE646F9B582933B58FFA188F3955508CC2F3E87D30BE9`.

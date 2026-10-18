@@ -54,6 +54,28 @@ Invoke-RestMethod "$baseUrl/api/fleet"
 
 Case B is a separate manual approval flow: approve its evaluated recommendation as Commander, then receive the returned transfer as Logistics; a Base Manager scoped to Charlie can start and complete its work order after receipt. Case C already has an IN_TRANSIT transfer and must not be approved again. Case E is already IN_PROGRESS and can be completed by a Base Manager scoped to Bravo. Approval, receipt, and maintenance actions are manual API calls; they are not automatic UI transitions.
 
+## Inspecting a cycle-based spares forecast
+
+The default UI forecast horizon is 60 cycles. At this horizon, the alternating demo map plus this fixture's stock and reserve state produced two eligible predictions and seven outside the horizon. The preview proposed one feasible HP-204 unit from Charlie to Bravo (260 km, estimated 4.3 hours). Bravo had expected HP-204 demand 0.1781 and one unit at its minimum reserve; Charlie's HP-204 source had one transferable unit before the proposal. The preview debits that unit only in its cloned suggestion ledger. Charlie's OE-310 demand was 0.4215 with three units at a minimum reserve of three, so it had no transferable OE-310 stock. The endpoint is read-only: viewing a suggested move does not reserve inventory or create a transfer.
+
+In the UI, select Logistics and use the forecast panel's request action on a feasible suggested move. This submits a separate pending transfer request through the existing API. The equivalent request is:
+
+```powershell
+$headers = @{ 'X-Demo-Role' = 'logistics' }
+$body = @{
+  part_number = 'HP-204'
+  source_base = 'Charlie'
+  dest_base = 'Bravo'
+  quantity = 1
+  actor = 'logistics'
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/api/transfers' `
+  -Headers $headers -ContentType 'application/json' -Body $body
+```
+
+`POST /api/transfers` returns a `PENDING_APPROVAL` transfer. It does not approve, dispatch, receive, or reserve stock. Those are separate role-checked actions, and the live approval path checks current inventory again. Treat the body above as an example only; use a move the current forecast marks feasible, because state and forecast values may change. Demo-role headers are caller-selected claims, not authenticated identities.
+
 ## Six scenario cases
 
 | Case | Aircraft | Fixture state | What to inspect |
@@ -69,7 +91,7 @@ The fixture uses explicit demo-role permissions before invoking existing service
 
 ## Data and accounting notes
 
-The provider continues to map the existing ten aircraft IDs to FD001 test engines 1–10. The locally trained model artifact produced A17/engine 1 at 123.9902 cycles (LOW), A21/engine 3 at 52.2867 cycles (CRITICAL), A24/engine 5 at 85.9682 cycles (MEDIUM), and A32/engine 8 at 65.4386 cycles (HIGH). These are model outputs from fixed simulated test histories, not fixture-assigned RUL values. All model outputs retain `rul_unit: cycles`, `failure_probability: null`, `subsystem: null`, `is_synthetic: true`, and the existing model version. No cycle-to-hour/calendar conversion is introduced. Health and risk are the existing derived display indicators, not calibrated probability.
+The provider continues to map the existing ten aircraft IDs to FD001 test engines 1–10. The default demo engine-to-part map assigns odd engines to HP-204 and even engines to OE-310; it is configurable and synthetic. The locally trained model artifact produced A17/engine 1 at 123.9902 cycles (LOW), A21/engine 3 at 52.2867 cycles (CRITICAL), A24/engine 5 at 85.9682 cycles (MEDIUM), and A32/engine 8 at 65.4386 cycles (HIGH). These are model outputs from fixed simulated test histories, not fixture-assigned RUL values. All model outputs retain `rul_unit: cycles`, `failure_probability: null`, `subsystem: null`, `is_synthetic: true`, and the existing model version. No cycle-to-hour/calendar conversion is introduced. Health and risk are the existing derived display indicators, not calibrated probability.
 
 The fixture's aircraft/base assignments, work-order labels, reserve policies and task progress are synthetic operational context. Predictive-event triage choices are marked `component_source: human_selected`; they are not predictions by the FD001 model. This small catalog has no aircraft-specific compatibility or airworthiness data. The choices use catalogued components and existing resource conditions but do not assert engineering fit.
 
