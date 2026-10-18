@@ -99,6 +99,7 @@ def forecast_resources(horizon_cycles: float = 30.0, *,
     model_versions: set[str] = set()
     aircraft_components: dict[str, str] = {}
     prediction_exclusions: dict[str, str] = {}
+    horizon_suggestion_candidates: list[dict] = []
     for aircraft_id, aircraft in aircraft_by_id.items():
         prediction = predictions.get(aircraft_id)
         if not isinstance(prediction, dict):
@@ -125,6 +126,11 @@ def forecast_resources(horizon_cycles: float = 30.0, *,
         if (aircraft_id, component) in active_aircraft_component:
             prediction_exclusions[aircraft_id] = "covered_by_open_work_order"
             continue
+        # Keep only the same mapped, non-work-order-covered predictions that
+        # can contribute to the active forecast. Larger-horizon suggestions
+        # reuse these already-fetched values; they never call the provider or
+        # rerun forecast_resources recursively.
+        horizon_suggestion_candidates.append(prediction)
         probability, exclusion = _probability_within_horizon(prediction, horizon_cycles)
         if probability is None:
             prediction_exclusions[aircraft_id] = str(exclusion)
@@ -147,6 +153,16 @@ def forecast_resources(horizon_cycles: float = 30.0, *,
             "model_version": prediction.get("model_version"),
             "demand_basis": "indicative_cycle_rul_only",
         })
+
+    suggested_horizon_cycles = None
+    if eligible_prediction_count == 0:
+        for tested_horizon in (60, 100, 125):
+            if tested_horizon <= horizon_cycles:
+                continue
+            if any(_probability_within_horizon(prediction, tested_horizon)[0] is not None
+                   for prediction in horizon_suggestion_candidates):
+                suggested_horizon_cycles = tested_horizon
+                break
 
     # Reuse the planner's read-only commitment ledger. It accounts for
     # pending donor claims and all open work-order local/received reservations.
@@ -381,6 +397,7 @@ def forecast_resources(horizon_cycles: float = 30.0, *,
     return {
         "forecast_status": "available" if eligible_prediction_count else "no_eligible_predictions",
         "horizon_cycles": horizon_cycles,
+        "suggested_horizon_cycles": suggested_horizon_cycles,
         "provider": provider_name,
         "model_version": next(iter(model_versions)) if len(model_versions) == 1 else None,
         "mapping": {

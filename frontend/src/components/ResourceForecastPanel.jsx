@@ -5,6 +5,8 @@ import { ActionButton, DataError, Loading, SectionTitle } from './ui.jsx';
 const isNumber = value => typeof value === 'number' && Number.isFinite(value);
 const countText = value => isNumber(value) ? value.toLocaleString() : '—';
 const demandText = value => isNumber(value) ? value.toFixed(2) : 'Unavailable';
+export const DEFAULT_FORECAST_HORIZON = 60;
+const QUICK_FORECAST_HORIZONS = [30, 60, 100];
 const inputStyle = {
   width: 86, background: '#151b24', color: '#e6e9ee', border: '1px solid #2a3444',
   borderRadius: 6, padding: '5px 8px', fontSize: 12,
@@ -33,15 +35,20 @@ export function DemandStockChart({ componentRow }) {
   );
 }
 
-export function ForecastEligibilityNotice({ forecast }) {
+export function ForecastEligibilityNotice({ forecast, horizonCycles }) {
   if (forecast?.forecast_status === 'no_eligible_predictions') {
     const unavailable = isNumber(forecast.unavailable_prediction_count) ? forecast.unavailable_prediction_count : null;
     const outside = isNumber(forecast.outside_horizon_prediction_count) ? forecast.outside_horizon_prediction_count : null;
+    const suggested = isNumber(forecast.suggested_horizon_cycles)
+      && forecast.suggested_horizon_cycles > Number(horizonCycles)
+      ? forecast.suggested_horizon_cycles
+      : null;
     return (
       <div role="status" style={{ color: '#8b94a3', fontSize: 13, marginBottom: 10 }}>
         No eligible cycle predictions overlap this horizon.
         {unavailable != null ? ` ${unavailable} predictions unavailable because provider or uncertainty fields are missing.` : ''}
         {outside != null ? ` ${outside} valid predictions fall outside the selected horizon.` : ''}
+        {suggested != null ? ` Try ${suggested} cycles; the backend found eligible predictions at that horizon.` : ''}
       </div>
     );
   }
@@ -51,8 +58,44 @@ export function ForecastEligibilityNotice({ forecast }) {
   return null;
 }
 
+export function ForecastHorizonControls({ horizon, onHorizonChange, disabled = false }) {
+  return (
+    <>
+      <label htmlFor="resource-forecast-horizon" style={{ color: '#8b94a3', fontSize: 11 }}>Horizon · cycles</label>
+      <input
+        id="resource-forecast-horizon"
+        aria-label="Forecast horizon in cycles"
+        type="number"
+        min="1"
+        step="1"
+        value={horizon}
+        onChange={event => onHorizonChange(event.target.value)}
+        style={inputStyle}
+      />
+      <div role="group" aria-label="Quick-select forecast horizon" style={{ display: 'flex', gap: 4 }}>
+        {QUICK_FORECAST_HORIZONS.map(cycles => (
+          <button
+            key={cycles}
+            type="button"
+            aria-label={`${cycles} cycles`}
+            aria-pressed={Number(horizon) === cycles}
+            disabled={disabled}
+            onClick={() => onHorizonChange(String(cycles))}
+            style={{
+              background: Number(horizon) === cycles ? '#3a3020' : '#151b24',
+              color: Number(horizon) === cycles ? '#f0c35a' : '#c6ccd6',
+              border: '1px solid #2a3444', borderRadius: 6, padding: '5px 7px',
+              cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 10,
+            }}
+          >{cycles}</button>
+        ))}
+      </div>
+    </>
+  );
+}
+
 export default function ResourceForecastPanel({ canRequestMove = false, refreshKey = 0, onRefresh }) {
-  const [horizon, setHorizon] = React.useState('30');
+  const [horizon, setHorizon] = React.useState(String(DEFAULT_FORECAST_HORIZON));
   const [forecast, setForecast] = React.useState(null);
   const [error, setError] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
@@ -114,9 +157,8 @@ export default function ResourceForecastPanel({ canRequestMove = false, refreshK
 
   return (
     <section style={{ margin: '18px 0' }} aria-label="Cycle-based component demand forecast">
-      <SectionTitle right={<div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-        <label htmlFor="resource-forecast-horizon" style={{ color: '#8b94a3', fontSize: 11 }}>Horizon · cycles</label>
-        <input id="resource-forecast-horizon" type="number" min="1" step="1" value={horizon} onChange={event => setHorizon(event.target.value)} style={inputStyle} />
+      <SectionTitle right={<div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 7 }}>
+        <ForecastHorizonControls horizon={horizon} onHorizonChange={setHorizon} disabled={loading} />
         <ActionButton small disabled={loading || !Number.isInteger(Number(horizon)) || Number(horizon) < 1} onClick={() => setAttempt(value => value + 1)}>{loading ? 'Loading…' : 'Refresh'}</ActionButton>
       </div>}>
         Component demand forecast
@@ -150,7 +192,7 @@ export default function ResourceForecastPanel({ canRequestMove = false, refreshK
               {forecast.demand_method ? <div style={{ marginTop: 6 }}>Method: {forecast.demand_method}</div> : null}
               {assumptions.length ? <ul style={{ margin: '5px 0 0', paddingLeft: 18 }}>{assumptions.map((item, index) => <li key={index}>{item}</li>)}</ul> : null}
             </details>
-            <ForecastEligibilityNotice forecast={forecast} />
+            <ForecastEligibilityNotice forecast={forecast} horizonCycles={horizon} />
             {rows.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
                 {rows.map((row, index) => {

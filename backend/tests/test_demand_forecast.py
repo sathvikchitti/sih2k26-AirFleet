@@ -219,7 +219,53 @@ def test_mock_hour_rul_is_unavailable_not_zero_demand(monkeypatch):
     assert result["forecast_status"] == "no_eligible_predictions"
     assert result["eligible_prediction_count"] == 0
     assert result["unavailable_prediction_count"] == 3
+    assert result["suggested_horizon_cycles"] is None
     assert _component(result, "alpha")["expected_demand"] is None
+
+
+@pytest.mark.parametrize(
+    ("current_horizon", "rul", "std", "expected_horizon"),
+    [(30, 90, 10, 100), (100, 140, 10, 125)],
+)
+def test_no_eligible_forecast_suggests_smallest_larger_tested_horizon(
+        monkeypatch, current_horizon, rul, std, expected_horizon):
+    predictions = {
+        "A17": _prediction("A17", 1, rul, std),
+        "A19": _prediction("A19", 2, 200, 1),
+        "A21": _prediction("A21", 3, 200, 1),
+    }
+    state = _setup(monkeypatch, predictions=predictions)
+
+    first = forecast.forecast_resources(
+        current_horizon, _state=state, _predictions=predictions,
+    )
+    repeated = forecast.forecast_resources(
+        current_horizon, _state=state, _predictions=predictions,
+    )
+
+    assert first["forecast_status"] == "no_eligible_predictions"
+    assert first["eligible_prediction_count"] == 0
+    assert first["suggested_horizon_cycles"] == expected_horizon
+    assert repeated["suggested_horizon_cycles"] == expected_horizon
+
+
+def test_horizon_suggestion_excludes_open_work_orders_and_has_no_guess_when_none_qualify(monkeypatch):
+    predictions = {
+        "A17": _prediction("A17", 1, 90, 10),
+        "A19": _prediction("A19", 2, 200, 1),
+        "A21": _prediction("A21", 3, 200, 1),
+    }
+    state = _setup(monkeypatch, predictions=predictions)
+    state["work_orders"] = [{
+        "id": "WO-OPEN", "aircraft_id": "A17", "base_id": "alpha",
+        "required_component": "HP-204", "status": "WAITING_FOR_RESOURCE",
+    }]
+
+    result = forecast.forecast_resources(30, _state=state, _predictions=predictions)
+
+    assert result["forecast_status"] == "no_eligible_predictions"
+    assert result["excluded_open_work_order_count"] == 1
+    assert result["suggested_horizon_cycles"] is None
 
 
 def test_open_work_order_inbound_does_not_cover_another_aircraft_forecast(monkeypatch):
@@ -347,6 +393,7 @@ def test_forecast_api_returns_cycle_contract_and_leaves_live_state_unchanged(mon
     assert payload["forecast_status"] == "available"
     assert payload["mapping"]["label"] == "assumed mapping for demo"
     assert payload["eligible_prediction_count"] == 1
+    assert payload["suggested_horizon_cycles"] is None
     assert payload["mutated_state"] is False
     assert _component(payload, "alpha")["expected_demand"] == pytest.approx(0.5)
     assert invalid.status_code == 422

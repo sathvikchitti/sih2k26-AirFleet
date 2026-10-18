@@ -29,7 +29,7 @@ import MaintenanceResourcesView from '../../src/pages/views/MaintenanceResources
 import LogisticsBasesView from '../../src/pages/views/LogisticsBasesView.jsx';
 import Commander from '../../src/pages/Commander.jsx';
 import { BaseMissionReadiness, MissionReadinessBand } from '../../src/pages/Commander.jsx';
-import { DemandStockChart, ForecastEligibilityNotice } from '../../src/components/ResourceForecastPanel.jsx';
+import ResourceForecastPanel, { DemandStockChart, ForecastEligibilityNotice } from '../../src/components/ResourceForecastPanel.jsx';
 import { EvaluationIntervalChart, EvaluationResults } from '../../src/components/EvaluationSummaryPanel.jsx';
 import BaseManager from '../../src/pages/BaseManager.jsx';
 import Logistics from '../../src/pages/Logistics.jsx';
@@ -176,15 +176,33 @@ if (!demandChartText(demandChartHtml).includes('Expected demand 1.38') || !deman
 }
 console.log('  PASS  cycle resource stock-versus-demand chart (fractional and unavailable cases)');
 const forecastEligibilityHtml = renderToString(React.createElement(ForecastEligibilityNotice, {
-  forecast: { forecast_status: 'no_eligible_predictions', unavailable_prediction_count: 2, outside_horizon_prediction_count: 3 },
+  forecast: { forecast_status: 'no_eligible_predictions', unavailable_prediction_count: 2, outside_horizon_prediction_count: 3, suggested_horizon_cycles: 60 },
+  horizonCycles: 30,
 }));
 const forecastEligibilityText = forecastEligibilityHtml.replace(/<!--.*?-->/g, '').replace(/<[^>]*>/g, '');
 if (!forecastEligibilityText.includes('No eligible cycle predictions overlap this horizon.')
   || !forecastEligibilityText.includes('2 predictions unavailable')
-  || !forecastEligibilityText.includes('3 valid predictions fall outside the selected horizon')) {
+  || !forecastEligibilityText.includes('3 valid predictions fall outside the selected horizon')
+  || !forecastEligibilityText.includes('Try 60 cycles; the backend found eligible predictions at that horizon.')) {
   throw new Error('Forecast eligibility notice should distinguish unavailable predictions from predictions outside the selected horizon');
 }
-console.log('  PASS  forecast eligibility messaging distinguishes unavailable and outside-horizon predictions');
+const noSuggestionHtml = renderToString(React.createElement(ForecastEligibilityNotice, {
+  forecast: { forecast_status: 'no_eligible_predictions', suggested_horizon_cycles: null },
+  horizonCycles: 30,
+}));
+if (noSuggestionHtml.includes('Try ')) throw new Error('Forecast eligibility notice must not guess a horizon when the backend provides none');
+const defaultForecastHtml = renderToString(React.createElement(ResourceForecastPanel, { canRequestMove: false }));
+if (!defaultForecastHtml.includes('value="60"')
+  || !defaultForecastHtml.includes('aria-label="Quick-select forecast horizon"')
+  || !defaultForecastHtml.includes('aria-pressed="true"')) {
+  throw new Error('Resource forecast panel should initially render its input and active quick-select at 60 cycles');
+}
+for (const cycle of [30, 60, 100]) {
+  if (!defaultForecastHtml.includes(`aria-label="${cycle} cycles"`)) {
+    throw new Error(`Forecast horizon quick-select should include ${cycle} cycles`);
+  }
+}
+console.log('  PASS  forecast horizon default/quick-select and backend-suggested empty state');
 
 const evaluationFixture = {
   evaluation_type: 'deterministic_synthetic_simulation',
