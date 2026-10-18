@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .base import PredictionValidationError, risk_band
-from .fd001_model import FD001RULModel, load_engine_histories
+from .fd001_model import FD001RULModel, healthy_training_reference, load_engine_histories
 
 
 # Stable one-to-one demo mapping. These aircraft IDs and the NASA engine
@@ -25,10 +25,14 @@ class FD001MLProvider:
 
     name = "fd001-random-forest"
     trend_source = "fd001_model_prefix_predictions"
+    rul_trend_source = "fd001_model_prefix_predictions"
 
-    def __init__(self, model: FD001RULModel, histories: dict[int, object]):
+    def __init__(self, model: FD001RULModel, histories: dict[int, object],
+                 healthy_reference: dict | None = None):
         self._model = model
         self._histories = histories
+        # Derived once at provider construction, never fitted per prediction.
+        self._healthy_reference = healthy_reference
 
     @classmethod
     def from_environment(cls) -> "FD001MLProvider":
@@ -43,12 +47,30 @@ class FD001MLProvider:
         missing = sorted(set(AIRCRAFT_TO_FD001_ENGINE.values()) - set(histories))
         if missing:
             raise ValueError(f"FD001 test histories are missing mapped engine IDs: {missing}")
-        return cls(model, histories)
+        try:
+            healthy_reference = healthy_training_reference(
+                data_dir, int(model.metadata.get("target_cap_cycles", 125)),
+            )
+        except (OSError, ValueError) as exc:
+            # Old artifacts remain usable when training files are not deployed;
+            # the optional drivers simply become unavailable.
+            import logging
+            logging.getLogger(__name__).warning(
+                "FD001 driver reference unavailable; predictions remain enabled: %s",
+                exc,
+            )
+            healthy_reference = None
+        return cls(model, histories, healthy_reference)
 
     @staticmethod
     def health_from_rul(rul_cycles: float) -> int:
         bounded = min(max(float(rul_cycles), 0.0), float(HEALTH_RUL_CAP_CYCLES))
         return int(round(100.0 * bounded / HEALTH_RUL_CAP_CYCLES))
+
+    def _predict_history(self, history):
+        if self._healthy_reference is None:
+            return self._model.predict_history(history)
+        return self._model.predict_history(history, self._healthy_reference)
 
     def predict(self, aircraft_id: str) -> dict:
         key = str(aircraft_id).strip().upper()
@@ -59,7 +81,7 @@ class FD001MLProvider:
         if history is None:
             raise ValueError(f"mapped FD001 engine history {engine_id} is unavailable")
 
-        output = self._model.predict_history(history)
+        output = self._predict_history(history)
         rul = float(output["rul_cycles"])
         health = self.health_from_rul(rul)
         level = risk_band(health)
@@ -77,6 +99,14 @@ class FD001MLProvider:
             "rul": rul,
             "remaining_useful_life": rul,
             "rul_unit": "cycles",
+            "rul_low": output.get("rul_low"),
+            "rul_high": output.get("rul_high"),
+            "tree_rul_p10": output.get("tree_rul_p10"),
+            "tree_rul_p90": output.get("tree_rul_p90"),
+            "rul_std": output.get("rul_std"),
+            "rul_uncertainty_method": output.get("rul_uncertainty_method"),
+            "top_drivers": output.get("top_drivers", []),
+            "driver_method": output.get("driver_method"),
             "risk_level": level,
             "predicted_issue": (
                 f"FD001 RUL indicator is {rul:.1f} cycles; human subsystem diagnosis required"
@@ -112,6 +142,29 @@ class FD001MLProvider:
 
         end_indices = np.unique(np.linspace(1, len(history), min(points, len(history)), dtype=int))
         return [
-            self.health_from_rul(self._model.predict_history(history[:end])['rul_cycles'])
+            self.health_from_rul(self._predict_history(history[:end])['rul_cycles'])
             for end in end_indices
         ]
+
+    def rul_trend(self, aircraft_id: str, points: int = 12) -> list[dict]:
+        """Retrospective model predictions on observed-history prefixes."""
+        key = str(aircraft_id).strip().upper()
+        engine_id = AIRCRAFT_TO_FD001_ENGINE.get(key)
+        if engine_id is None or engine_id not in self._histories:
+            raise ValueError(f"no FD001 demo engine history is mapped to aircraft {key!r}")
+        if points < 1:
+            raise ValueError("points must be positive")
+        history = self._histories[engine_id]
+        import numpy as np
+
+        end_indices = np.unique(np.linspace(1, len(history), min(points, len(history)), dtype=int))
+        result = []
+        for end in end_indices:
+            prediction = self._predict_history(history[:end])
+            result.append({
+                "cycle": int(history[end - 1][0]),
+                "rul_cycles": prediction["rul_cycles"],
+                "rul_low": prediction["rul_low"],
+                "rul_high": prediction["rul_high"],
+            })
+        return result

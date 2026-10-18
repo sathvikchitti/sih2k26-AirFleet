@@ -141,6 +141,38 @@ def validate_prediction(prediction: dict, aircraft_id: str, *, now: datetime | N
         rul = _bounded_number(rul, "remaining_useful_life", 0, 1e9)
         if unit not in {"flight_hours", "cycles"}:
             raise PredictionValidationError("rul_unit must be flight_hours or cycles")
+    interval_fields = ("rul_low", "rul_high")
+    if any(prediction.get(key) is not None for key in interval_fields):
+        if rul is None or any(prediction.get(key) is None for key in interval_fields):
+            raise PredictionValidationError("rul_low and rul_high require an RUL point prediction")
+        low = _bounded_number(prediction["rul_low"], "rul_low", 0, 1e9)
+        high = _bounded_number(prediction["rul_high"], "rul_high", 0, 1e9)
+        if low > rul or high < rul or low > high:
+            raise PredictionValidationError("RUL interval must contain the point prediction")
+    raw_interval_fields = ("tree_rul_p10", "tree_rul_p90")
+    if any(prediction.get(key) is not None for key in raw_interval_fields):
+        if any(prediction.get(key) is None for key in raw_interval_fields):
+            raise PredictionValidationError("tree RUL percentiles must be supplied together")
+        raw_low = _bounded_number(prediction["tree_rul_p10"], "tree_rul_p10", 0, 1e9)
+        raw_high = _bounded_number(prediction["tree_rul_p90"], "tree_rul_p90", 0, 1e9)
+        if raw_low > raw_high:
+            raise PredictionValidationError("tree RUL p10 must not exceed p90")
+    if prediction.get("rul_std") is not None:
+        _bounded_number(prediction["rul_std"], "rul_std", 0, 1e9)
+    for name in ("rul_uncertainty_method", "driver_method"):
+        value = prediction.get(name)
+        if value is not None and not isinstance(value, str):
+            raise PredictionValidationError(f"{name} must be text or null")
+    drivers = prediction.get("top_drivers")
+    if drivers is not None and (not isinstance(drivers, list) or len(drivers) > 5):
+        raise PredictionValidationError("top_drivers must be a list of at most 5 entries")
+    if isinstance(drivers, list):
+        for driver in drivers:
+            if not isinstance(driver, dict):
+                raise PredictionValidationError("top_drivers entries must be objects")
+            if driver.get("direction") not in {"above_reference", "below_reference"}:
+                raise PredictionValidationError("top driver direction is invalid")
+            _bounded_number(driver.get("contribution_score"), "top driver contribution_score", -5, 5)
     horizon = prediction.get("prediction_horizon_hours", prediction.get("prediction_horizon"))
     if isinstance(horizon, dict):
         horizon = horizon.get("hours")

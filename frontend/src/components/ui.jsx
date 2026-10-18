@@ -43,7 +43,7 @@ export function HealthBar({ score }) {
 }
 
 // Simple illustrative degradation trend (POC) — not sensor data.
-export function HealthChart({ trend }) {
+export function HealthChart({ trend, caption = 'illustrative trend' }) {
   if (!trend || !trend.length) return null;
   const w = 420, h = 110, pad = 12;
   const min = Math.min(...trend) - 5, max = Math.max(...trend) + 5;
@@ -60,7 +60,7 @@ export function HealthChart({ trend }) {
       <path d={d} fill="none" stroke={col} strokeWidth="2.5" />
       {pts.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r="3" fill={col} opacity={i === pts.length - 1 ? 1 : 0.45} />)}
       <text x={last[0] - 34} y={last[1] - 10} fill={col} fontSize="13" fontWeight="800">{last[2]}%</text>
-      <text x={pad} y={h - 2} fill="#8b94a3" fontSize="9">t-11 … now (illustrative trend)</text>
+      <text x={pad} y={h - 2} fill="#8b94a3" fontSize="9">Sample order · {caption}</text>
     </svg>
   );
 }

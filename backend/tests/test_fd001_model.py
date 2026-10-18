@@ -5,7 +5,11 @@ import pytest
 
 from app.services.ml.fd001_model import (
     FD001RULModel,
+    evaluate_saved_artifact,
+    _life_classification,
+    _nasa_score,
     feature_vector,
+    healthy_training_reference,
     load_engine_histories,
     train_fd001,
 )
@@ -85,8 +89,12 @@ def test_training_is_grouped_reproducible_and_round_trips_artifact(tmp_path):
     assert validation["held_out_engine_count"] > 0
     assert set(validation["held_out_engine_ids"]).isdisjoint({1, 2, 3, 4, 5, 6} - set(validation["held_out_engine_ids"]))
     assert validation["random_forest"]["count"] == validation["held_out_engine_count"]
+    assert validation["hist_gradient_boosting"]["count"] == validation["held_out_engine_count"]
     assert first["official_test"]["test_observation_count"] == 3
     assert first["training_details"]["official_test_labels_used_for_training"] is False
+    assert "nasa_asymmetric_score" in first["official_test"]["random_forest"]
+    assert "uncertainty" in first["official_test"]["random_forest"]
+    assert first["official_test"]["median_rul_baseline"]["rul_le_30_cycles"]["confusion"]
 
     model = FD001RULModel.load(first_path)
     history = load_engine_histories(data_dir, "test")[1]
@@ -105,8 +113,58 @@ def test_training_is_grouped_reproducible_and_round_trips_artifact(tmp_path):
     assert {key: value for key, value in repeated_prediction.items() if key != "rul_cycles"} == {
         key: value for key, value in prediction.items() if key != "rul_cycles"
     }
+    saved_metrics = evaluate_saved_artifact(data_dir, first_path)
+    assert saved_metrics["model_version"] == "cmapss-fd001-rf-v1"
+    assert len(saved_metrics["artifact_sha256"]) == 64
+    assert saved_metrics["official_test"]["count"] == 3
 
 
 def test_missing_artifact_fails_clearly(tmp_path):
     with pytest.raises(FileNotFoundError, match="artifact is unavailable"):
         FD001RULModel.load(tmp_path / "missing.joblib")
+
+
+def test_tree_spread_envelope_and_indicative_drivers_are_distinct_and_bounded(tmp_path):
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _make_fd001_fixture(data_dir)
+    artifact = tmp_path / "model.joblib"
+    train_fd001(data_dir, artifact, target_cap=5, n_estimators=12)
+    model = FD001RULModel.load(artifact)
+    histories = load_engine_histories(data_dir, "test")
+    reference = healthy_training_reference(data_dir, target_cap=5)
+
+    first = model.predict_history(histories[1], reference)
+    second = model.predict_history(histories[1], reference)
+
+    for key in ("rul_cycles", "rul_low", "rul_high", "tree_rul_p10", "tree_rul_p90", "rul_std"):
+        assert first[key] == pytest.approx(second[key], rel=1e-12, abs=1e-12)
+    assert {key: value for key, value in first.items()
+            if key not in {"rul_cycles", "rul_low", "rul_high", "tree_rul_p10",
+                           "tree_rul_p90", "rul_std"}} == {
+        key: value for key, value in second.items()
+        if key not in {"rul_cycles", "rul_low", "rul_high", "tree_rul_p10",
+                       "tree_rul_p90", "rul_std"}
+    }
+    assert first["rul_low"] <= first["rul_cycles"] <= first["rul_high"]
+    assert first["tree_rul_p10"] <= first["tree_rul_p90"]
+    assert first["rul_std"] >= 0
+    assert first["rul_low"] <= first["tree_rul_p10"]
+    assert first["rul_high"] >= first["tree_rul_p90"]
+    assert "uncalibrated" in first["rul_uncertainty_method"]
+    assert len(first["top_drivers"]) <= 5
+    assert all(driver["feature"] != "cycle" for driver in first["top_drivers"])
+    assert all(abs(driver["contribution_score"]) <= 5 for driver in first["top_drivers"])
+    assert all(driver["direction"] in {"above_reference", "below_reference"}
+               for driver in first["top_drivers"])
+    assert "indicative" in first["driver_method"]
+
+
+def test_official_error_metrics_follow_asymmetric_score_and_30_cycle_rule():
+    true = np.asarray([10.0, 50.0, 20.0, 80.0])
+    prediction = np.asarray([0.0, 20.0, 40.0, 70.0])
+    expected_score = np.expm1(10 / 13) + np.expm1(30 / 13) + np.expm1(2) + np.expm1(10 / 13)
+    assert _nasa_score(true, prediction) == pytest.approx(expected_score, abs=1e-4)
+    result = _life_classification(true, prediction)
+    assert result["confusion"] == {"tp": 1, "fp": 1, "tn": 1, "fn": 1}
+    assert result["precision"] == result["recall"] == result["f1"] == 0.5

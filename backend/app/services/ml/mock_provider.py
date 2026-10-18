@@ -60,6 +60,7 @@ class MockMLProvider:
 
     name = "mock-ml-service"
     trend_source = "illustrative_mock_curve"
+    rul_trend_source = "unavailable_mock_no_observed_prefixes"
 
     def predict(self, aircraft_id: str) -> dict:
         key = str(aircraft_id).upper()
@@ -77,6 +78,17 @@ class MockMLProvider:
             "rul": m["rul"],
             "remaining_useful_life": m["rul"],
             "rul_unit": "flight_hours",
+            # The deterministic demo provider has no tree ensemble or driver
+            # reference. Keep the additive contract explicit without implying
+            # a fabricated interval or explanation.
+            "rul_low": None,
+            "rul_high": None,
+            "tree_rul_p10": None,
+            "tree_rul_p90": None,
+            "rul_std": None,
+            "rul_uncertainty_method": None,
+            "top_drivers": [],
+            "driver_method": None,
             "confidence": m["confidence"],
             "risk_level": _risk_band(m["health_score"], m["failure_probability"]),
             "predicted_issue": m["predicted_issue"],
@@ -102,6 +114,10 @@ class MockMLProvider:
         start = min(98, score + 22)
         step = (start - score) / max(1, points - 1)
         return [round(start - step * i) for i in range(points)]
+
+    def rul_trend(self, aircraft_id: str, points: int = 12) -> list[dict]:
+        """No observed RUL prefix series exists for the illustrative mock."""
+        return []
 
 
 _provider: MockMLProvider | None = None

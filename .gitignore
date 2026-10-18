@@ -4,6 +4,7 @@ CMAPSSData/
 # Generated, versioned model artifact and evaluation output.
 backend/models/*.joblib
 backend/models/*_metrics.json
+!backend/models/cmapss_fd001_rf_v1_metrics.json
 
 # Python test/runtime output.
 __pycache__/

@@ -196,10 +196,15 @@ def aircraft_detail(aircraft_id: str) -> dict | None:
     history_source = ("mixed_synthetic_and_recorded" if has_synthetic and has_recorded
                       else "illustrative" if has_synthetic else "recorded")
     provider = get_provider()
+    rul_trend = provider.rul_trend(aircraft["id"]) if callable(
+        getattr(provider, "rul_trend", None)
+    ) else []
     return {
         **aircraft_legacy(aircraft),
         "trend": provider.degradation_trend(aircraft["id"]),
         "trend_source": getattr(provider, "trend_source", "illustrative_provider_curve"),
+        "rul_trend": rul_trend,
+        "rul_trend_source": getattr(provider, "rul_trend_source", "unavailable"),
         "maintenance": legacy_maintenance(active),
         "resource_availability": stock,
         "recommendation": recommendation,

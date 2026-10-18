@@ -2,6 +2,7 @@ import React from 'react';
 import { api, baseName, distanceText, etaText, failureProbabilityText, healthScoreText, rulText } from '../services/api.js';
 import { Badge, HealthBar, HealthChart, SectionTitle, riskColor, statusColor } from '../components/ui.jsx';
 import MaintenanceCasePanel from '../components/MaintenanceCasePanel.jsx';
+import { RulEnvelope, RulHistoryChart, TopSensorDrivers } from '../components/PredictionEvidence.jsx';
 
 // Closed loop: WAITING → IN TRANSIT → RECEIVED → READY → IN_PROGRESS → AVAILABLE
 export default function AircraftDetail({ id, role, homeBase, onBack, refresh, refreshKey }) {
@@ -57,6 +58,8 @@ export default function AircraftDetail({ id, role, homeBase, onBack, refresh, re
   const historySource = h.history_source || d.history_source || '';
   const trendSource = d.trend_source || h.trend_source || '';
   const fd001PrefixTrend = trendSource === 'fd001_model_prefix_predictions';
+  const healthTrendCaption = fd001PrefixTrend ? 'FD001 prefix predictions'
+    : trendSource === 'illustrative_mock_curve' ? 'illustrative mock curve' : 'provider trend';
   const syntheticEngineHistory = Boolean(h.is_synthetic || d.is_synthetic)
     && (String(historySource).includes('cmapss') || String(h.source || d.source || '').includes('cmapss'));
 
@@ -88,6 +91,7 @@ export default function AircraftDetail({ id, role, homeBase, onBack, refresh, re
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12, fontSize: 13 }}>
             <div>Failure probability<br /><b>{failureProbabilityText(h)}</b></div>
             <div>Remaining useful life<br /><b>{rulText(h)}</b></div>
+            <div>Tree-spread envelope · uncalibrated<br /><b><RulEnvelope prediction={h} /></b></div>
             <div>Confidence<br /><b>{failureProbabilityText({ failure_probability: h.confidence })}</b></div>
             <div>Predicted mx<br /><b>{h.predicted_maintenance == null ? 'Unavailable' : h.predicted_maintenance ? 'REQUIRED' : 'Not required'}</b></div>
             <div>Subsystem<br /><b>{h.subsystem || 'Unavailable'}</b></div>
@@ -108,6 +112,7 @@ export default function AircraftDetail({ id, role, homeBase, onBack, refresh, re
               {predictionStale || h.is_stale ? <> · <b style={{ color: '#e05c5c' }}>Stale prediction</b></> : null}
             </div>
           )}
+          <TopSensorDrivers drivers={h.top_drivers} method={h.driver_method} />
           <div style={{ marginTop: 10, fontSize: 13 }}>ML required component: <b>{modelComponent || '—'}</b></div>
           {workOrderComponent && <div style={{ fontSize: 13 }}>Active work-order component: <b>{workOrderComponent}</b>{activeWorkOrder?.component_source === 'human_selected' ? <span style={{ color: '#8b94a3' }}> · selected by operator, not an ML output</span> : activeWorkOrder?.component_source === 'knowledge_rule' ? <span style={{ color: '#8b94a3' }}> · selected by maintenance rule</span> : null}</div>}
           <div style={{ fontSize: 13 }}>Maintenance priority: <b>{(activeWorkOrder && activeWorkOrder.priority) || d.priority || 'Unavailable'}</b> · Est. recovery <b>{recoveryHours == null ? 'Unavailable' : `${recoveryHours}h`}</b></div>
@@ -115,7 +120,8 @@ export default function AircraftDetail({ id, role, homeBase, onBack, refresh, re
         </div>
         <div className="ops-card" style={{ padding: 16 }}>
           <div className="ops-label">Health trend ({fd001PrefixTrend ? 'FD001 model predictions over synthetic engine history' : trendSource === 'illustrative_mock_curve' ? 'illustrative mock curve' : historySource === 'recorded' ? 'recorded' : 'illustrative'})</div>
-          <div style={{ marginTop: 8 }}><HealthChart trend={d.trend} /></div>
+          <div style={{ marginTop: 8 }}><HealthChart trend={d.trend} caption={healthTrendCaption} /></div>
+          <div style={{ marginTop: 12 }}><RulHistoryChart trend={d.rul_trend} /></div>
           <div style={{ fontSize: 11, color: '#5d6675', marginTop: 6 }}>
             {fd001PrefixTrend ? 'Retrospective Random Forest predictions over simulated NASA C-MAPSS FD001 test-engine prefixes mapped to this demo aircraft; not real aircraft telemetry.' : trendSource === 'illustrative_mock_curve' || d.is_synthetic || historySource !== 'recorded' ? 'Illustrative degradation trend — not raw sensor data.' : 'Recorded prediction history — not raw sensor data.'}
           </div>

@@ -1,0 +1,322 @@
+{
+  "dataset": "NASA C-MAPSS FD001",
+  "dataset_source_note": "Local CMAPSSData files; no substitute or fabricated operational data.",
+  "evaluation_type": "offline_simulation",
+  "existing_artifact_reference": {
+    "artifact_sha256": "14114389bc8dc09449cde646f9b582933b58ffa188f3955508cc2f3e87d30be9",
+    "model_version": "cmapss-fd001-rf-v1",
+    "official_test": {
+      "count": 100,
+      "mae_cycles": 13.7862,
+      "nasa_asymmetric_score": 669.5007,
+      "rmse_cycles": 18.6998,
+      "rul_le_30_cycles": {
+        "confusion": {
+          "fn": 7,
+          "fp": 1,
+          "tn": 74,
+          "tp": 18
+        },
+        "f1": 0.818182,
+        "positive_class": "true_rul_at_or_below_threshold",
+        "precision": 0.947368,
+        "recall": 0.72,
+        "threshold_cycles": 30.0
+      },
+      "uncertainty": {
+        "mean_inclusive_envelope": {
+          "calibrated": false,
+          "coverage": 0.7,
+          "mean_width_cycles": 38.2033,
+          "method": "raw 10th-90th RF tree prediction envelope expanded to include forest mean"
+        },
+        "raw_tree_p10_p90": {
+          "coverage": 0.7,
+          "mean_width_cycles": 38.1932
+        }
+      }
+    },
+    "protocol": "one prediction per test engine at final observed cycle; official RUL labels scoring-only"
+  },
+  "feature_count_before_variance_filter": 73,
+  "feature_window_cycles": 10,
+  "numpy_version": "2.4.4",
+  "official_test": {
+    "hist_gradient_boosting": {
+      "count": 100,
+      "mae_cycles": 13.4704,
+      "nasa_asymmetric_score": 731.0885,
+      "rmse_cycles": 18.3971,
+      "rul_le_30_cycles": {
+        "confusion": {
+          "fn": 7,
+          "fp": 1,
+          "tn": 74,
+          "tp": 18
+        },
+        "f1": 0.818182,
+        "positive_class": "true_rul_at_or_below_threshold",
+        "precision": 0.947368,
+        "recall": 0.72,
+        "threshold_cycles": 30.0
+      }
+    },
+    "median_baseline_by_true_rul_range": {
+      "0-24": {
+        "count": 19,
+        "mae_cycles": 88.4737,
+        "rmse_cycles": 88.6278
+      },
+      "100+": {
+        "count": 34,
+        "mae_cycles": 17.1471,
+        "rmse_cycles": 20.5877
+      },
+      "25-49": {
+        "count": 11,
+        "mae_cycles": 69.2727,
+        "rmse_cycles": 69.6798
+      },
+      "50-99": {
+        "count": 36,
+        "mae_cycles": 24.5,
+        "rmse_cycles": 29.4109
+      }
+    },
+    "median_rul_baseline": {
+      "count": 100,
+      "mae_cycles": 39.08,
+      "nasa_asymmetric_score": 166570.5426,
+      "rmse_cycles": 49.8199,
+      "rul_le_30_cycles": {
+        "confusion": {
+          "fn": 25,
+          "fp": 0,
+          "tn": 75,
+          "tp": 0
+        },
+        "f1": 0.0,
+        "positive_class": "true_rul_at_or_below_threshold",
+        "precision": 0.0,
+        "recall": 0.0,
+        "threshold_cycles": 30.0
+      }
+    },
+    "protocol": "one prediction from each test engine's final observed row; official RUL_FD001 labels used only for scoring",
+    "random_forest": {
+      "count": 100,
+      "mae_cycles": 13.7862,
+      "nasa_asymmetric_score": 669.5007,
+      "rmse_cycles": 18.6998,
+      "rul_le_30_cycles": {
+        "confusion": {
+          "fn": 7,
+          "fp": 1,
+          "tn": 74,
+          "tp": 18
+        },
+        "f1": 0.818182,
+        "positive_class": "true_rul_at_or_below_threshold",
+        "precision": 0.947368,
+        "recall": 0.72,
+        "threshold_cycles": 30.0
+      },
+      "uncertainty": {
+        "mean_inclusive_envelope": {
+          "calibrated": false,
+          "coverage": 0.7,
+          "mean_width_cycles": 38.2033,
+          "method": "raw 10th-90th RF tree prediction envelope expanded to include forest mean"
+        },
+        "raw_tree_p10_p90": {
+          "coverage": 0.7,
+          "mean_width_cycles": 38.1932
+        }
+      }
+    },
+    "random_forest_by_true_rul_range": {
+      "0-24": {
+        "count": 19,
+        "mae_cycles": 7.9887,
+        "rmse_cycles": 15.4214
+      },
+      "100+": {
+        "count": 34,
+        "mae_cycles": 18.1563,
+        "rmse_cycles": 22.5255
+      },
+      "25-49": {
+        "count": 11,
+        "mae_cycles": 9.3185,
+        "rmse_cycles": 13.8531
+      },
+      "50-99": {
+        "count": 36,
+        "mae_cycles": 14.0839,
+        "rmse_cycles": 17.5493
+      }
+    },
+    "test_engine_count": 100,
+    "test_observation_count": 100,
+    "train_engine_count": 100
+  },
+  "random_seed": 42,
+  "scikit_learn_version": "1.9.0",
+  "target_cap_cycles": 125,
+  "train_only_selected_feature_count_final": 55,
+  "train_only_selected_feature_count_validation": 55,
+  "training_details": {
+    "asymmetric_score_convention": "d=prediction-true; underprediction penalty exp(-d/13)-1; overprediction penalty exp(d/10)-1",
+    "estimator": "RandomForestRegressor(n_estimators, min_samples_leaf=3, max_features=0.8, fixed random_state)",
+    "feature_filter": "VarianceThreshold(0.0), fit only on the training-engine samples for each fit",
+    "features": "current cycle plus last, trailing 10-cycle mean, and trailing linear slope for each setting and sensor",
+    "hist_gradient_boosting_comparator": "HistGradientBoostingRegressor(max_iter=100, learning_rate=0.1, max_leaf_nodes=15, l2_regularization=1.0, early_stopping=False); comparison only, not selected as production model",
+    "official_test_labels_used_for_training": false,
+    "provenance": "synthetic turbofan simulation; not aircraft telemetry or real-aircraft validation",
+    "target": "max(0, final_training_cycle - observed_cycle), capped at target_cap_cycles",
+    "uncertainty": "uncalibrated RF tree spread; raw 10th-90th tree percentiles and separate mean-inclusive envelope coverage are reported",
+    "unit": "cycles"
+  },
+  "training_file_sha256": "963b5e22825b34d8b21c69e1aeb4af3e647050eb672ee8834ba4b5d91d2de0f8",
+  "validation": {
+    "held_out_engine_count": 20,
+    "held_out_engine_ids": [
+      1,
+      5,
+      11,
+      13,
+      19,
+      23,
+      31,
+      32,
+      34,
+      40,
+      45,
+      46,
+      54,
+      71,
+      74,
+      77,
+      78,
+      81,
+      84,
+      91
+    ],
+    "hist_gradient_boosting": {
+      "count": 20,
+      "mae_cycles": 11.1986,
+      "nasa_asymmetric_score": 108.2358,
+      "rmse_cycles": 15.2746,
+      "rul_le_30_cycles": {
+        "confusion": {
+          "fn": 2,
+          "fp": 1,
+          "tn": 17,
+          "tp": 0
+        },
+        "f1": 0.0,
+        "positive_class": "true_rul_at_or_below_threshold",
+        "precision": 0.0,
+        "recall": 0.0,
+        "threshold_cycles": 30.0
+      }
+    },
+    "median_baseline_by_true_rul_range": {
+      "0-24": {
+        "count": 0,
+        "mae_cycles": null,
+        "rmse_cycles": null
+      },
+      "100+": {
+        "count": 0,
+        "mae_cycles": null,
+        "rmse_cycles": null
+      },
+      "25-49": {
+        "count": 16,
+        "mae_cycles": 65.625,
+        "rmse_cycles": 65.9583
+      },
+      "50-99": {
+        "count": 4,
+        "mae_cycles": 51.0,
+        "rmse_cycles": 51.0098
+      }
+    },
+    "median_rul_baseline": {
+      "count": 20,
+      "mae_cycles": 62.7,
+      "nasa_asymmetric_score": 14449.0527,
+      "rmse_cycles": 63.2519,
+      "rul_le_30_cycles": {
+        "confusion": {
+          "fn": 2,
+          "fp": 0,
+          "tn": 18,
+          "tp": 0
+        },
+        "f1": 0.0,
+        "positive_class": "true_rul_at_or_below_threshold",
+        "precision": 0.0,
+        "recall": 0.0,
+        "threshold_cycles": 30.0
+      }
+    },
+    "random_forest": {
+      "count": 20,
+      "mae_cycles": 11.2843,
+      "nasa_asymmetric_score": 74.4616,
+      "rmse_cycles": 14.5745,
+      "rul_le_30_cycles": {
+        "confusion": {
+          "fn": 1,
+          "fp": 1,
+          "tn": 17,
+          "tp": 1
+        },
+        "f1": 0.5,
+        "positive_class": "true_rul_at_or_below_threshold",
+        "precision": 0.5,
+        "recall": 0.5,
+        "threshold_cycles": 30.0
+      },
+      "uncertainty": {
+        "mean_inclusive_envelope": {
+          "calibrated": false,
+          "coverage": 0.8,
+          "mean_width_cycles": 37.9334,
+          "method": "raw 10th-90th RF tree prediction envelope expanded to include forest mean"
+        },
+        "raw_tree_p10_p90": {
+          "coverage": 0.8,
+          "mean_width_cycles": 37.9334
+        }
+      }
+    },
+    "random_forest_by_true_rul_range": {
+      "0-24": {
+        "count": 0,
+        "mae_cycles": null,
+        "rmse_cycles": null
+      },
+      "100+": {
+        "count": 0,
+        "mae_cycles": null,
+        "rmse_cycles": null
+      },
+      "25-49": {
+        "count": 16,
+        "mae_cycles": 10.8653,
+        "rmse_cycles": 14.4138
+      },
+      "50-99": {
+        "count": 4,
+        "mae_cycles": 12.9602,
+        "rmse_cycles": 15.2003
+      }
+    },
+    "split": "GroupShuffleSplit by engine id; one observation at 80% of each held-out training trajectory",
+    "train_engine_count": 80,
+    "train_observation_count": 16561
+  }
+}
