@@ -1,0 +1,13 @@
+.git/
+.env
+.env.*
+**/.env
+**/.env.*
+**/__pycache__/
+**/*.py[cod]
+**/*.log
+**/.pytest_cache/
+backend/.pytest-tmp*/
+frontend/node_modules/
+frontend/dist/
+frontend/dist-render-check/

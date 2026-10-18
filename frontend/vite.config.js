@@ -1,8 +1,13 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
+const loopbackPorts = new Set([5173, 5174, 5175])
+const demoPort = Number.parseInt(process.env.DEMO_FRONTEND_PORT || '', 10)
+if (Number.isInteger(demoPort) && demoPort > 0 && demoPort <= 65535) {
+  loopbackPorts.add(demoPort)
+}
 const loopbackOrigins = ['localhost', '127.0.0.1'].flatMap((host) =>
-  [5173, 5174, 5175].map((port) => `http://${host}:${port}`),
+  [...loopbackPorts].map((port) => `http://${host}:${port}`),
 )
 
 export default defineConfig(({ mode }) => {

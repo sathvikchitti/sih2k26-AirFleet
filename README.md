@@ -2,9 +2,34 @@
 
 A deterministic proof of concept for connecting aircraft condition predictions to maintenance planning, resource search, transfer execution, and fleet availability. The recommendation engine is decision support: a human must approve a recommendation before a transfer starts.
 
-## Run the application
+## Run the FD001 demo
 
-The backend uses FastAPI and in-memory repositories. The frontend uses React and Vite.
+The one-command launchers run the trained local FD001 provider with the six-case `fd001_operations` fixture. Install backend and frontend dependencies first (`python -m pip install -r backend/requirements.txt` and `npm ci` from `frontend/`). The model artifact and `CMAPSSData/test_FD001.txt` must be present; the launcher fails clearly if either is missing and never retrains the model. FD001 data is simulated engine history, mapped to demo aircraft IDs; it is not live aircraft telemetry.
+
+On Windows, from the repository root:
+
+```powershell
+.\run_demo.ps1
+```
+
+On macOS/Linux, from the repository root:
+
+```bash
+chmod +x ./run_demo.sh
+./run_demo.sh
+```
+
+Both launchers default to the frontend at `http://localhost:5173` and backend at `http://127.0.0.1:8000`. They check both loopback ports before starting and never stop an existing process. Keep the launcher running while using the demo; Ctrl+C stops only the backend and frontend processes it started. Logs are written under `backend/` and ignored by Git. If a port is occupied, choose unused ports. PowerShell accepts `-BackendPort 8011 -FrontendPort 5179`; Bash accepts `DEMO_BACKEND_PORT=8011 DEMO_FRONTEND_PORT=5179 ./run_demo.sh`. The frontend uses the same-origin `/api` proxy: `API_PROXY_TARGET` is server-only and `VITE_API_BASE` is explicitly empty.
+
+The same demo can run in Docker when Docker Engine and Compose are installed:
+
+```powershell
+docker compose up --build
+```
+
+Compose binds both services to loopback. To avoid occupied default ports, set `DEMO_BACKEND_PORT` and `DEMO_FRONTEND_PORT` in the environment before `docker compose up --build` (for example `8011` and `5179`); Compose fails without stopping any process if a requested port is busy. The backend image copies the existing model artifact and local `CMAPSSData` into the image. Use `docker compose down` to stop the containers you started. The backend reset control is enabled for this local demo, so do not expose it to a shared or public network.
+
+The launchers require already-installed dependencies. For the manual development workflow, the backend uses FastAPI and in-memory repositories, while the frontend uses React and Vite:
 
 ```powershell
 cd backend

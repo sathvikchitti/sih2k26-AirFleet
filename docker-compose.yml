@@ -1,0 +1,34 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      ML_PROVIDER: fd001
+      DEMO_SCENARIO: fd001_operations
+      DEMO_RESET_ENABLED: "true"
+      DEMO_PERMISSION_MODE: hardened
+      FD001_MODEL_PATH: /app/models/cmapss_fd001_rf_v1.joblib
+      FD001_DATA_DIR: /CMAPSSData
+      FRONTEND_ORIGINS: "http://localhost:${DEMO_FRONTEND_PORT:-5173},http://127.0.0.1:${DEMO_FRONTEND_PORT:-5173}"
+    ports:
+      - "127.0.0.1:${DEMO_BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      interval: 5s
+      timeout: 4s
+      retries: 18
+      start_period: 20s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    environment:
+      API_PROXY_TARGET: http://backend:8000
+      NGINX_ENVSUBST_FILTER: ^API_PROXY_TARGET$
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${DEMO_FRONTEND_PORT:-5173}:80"
