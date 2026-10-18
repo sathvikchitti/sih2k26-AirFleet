@@ -1,5 +1,15 @@
 # Aircraft Fleet Readiness & Sustainment Platform
 
+<!-- GENERATED EVIDENCE SUMMARY START -->
+- Problem: aircraft condition, maintenance, and spares records are fragmented, delaying readiness decisions.
+- Solution: an integrated FD001 RUL demo links model evidence to human-approved maintenance and resource workflows.
+- Measured: FD001 official-test MAE/RMSE 13.79/18.70 cycles; production-policy availability 84.27% vs nearest-FCFS 84.27% across 300 paired scenarios (95% paired interval for the difference [-0.019, 0.015] percentage points).
+- Run locally: `.\run_demo.ps1` (Windows PowerShell) or `./run_demo.sh` (macOS/Linux).
+- Evidence is from NASA C-MAPSS and synthetic fleet scenarios; intervals are uncalibrated and results are not real-fleet performance.
+<!-- GENERATED EVIDENCE SUMMARY END -->
+
+Refresh these five lines from the existing model metrics and scale-simulation JSON with `python scripts/update_readme_summary.py`; this reads the reports without retraining or rerunning simulations.
+
 A deterministic proof of concept for connecting aircraft condition predictions to maintenance planning, resource search, transfer execution, and fleet availability. The recommendation engine is decision support: a human must approve a recommendation before a transfer starts.
 
 ## Run the FD001 demo
@@ -42,10 +52,20 @@ In another terminal:
 ```powershell
 cd frontend
 npm install
+$env:API_PROXY_TARGET = 'http://127.0.0.1:8000'
+$env:VITE_API_BASE = ''
 npm run dev
 ```
 
-Open http://localhost:5173. Vite proxies API calls to port 8000. `FRONTEND_ORIGINS` optionally configures the comma-separated list of allowed browser origins; the default allows `http://localhost:5173` and `http://127.0.0.1:5173`. Credentialed CORS is disabled.
+Open http://localhost:5173. The manual backend command above uses port 8000, so set the Vite server-only `API_PROXY_TARGET` to that port as shown; the Vite default is port 8002. Keep `VITE_API_BASE` empty so requests use the same-origin proxy. `FRONTEND_ORIGINS` optionally configures the comma-separated list of allowed browser origins; the default allows `http://localhost:5173` and `http://127.0.0.1:5173`. Credentialed CORS is disabled.
+
+For macOS/Linux, set the same variables in the frontend terminal before `npm run dev`:
+
+```bash
+export API_PROXY_TARGET=http://127.0.0.1:8000
+export VITE_API_BASE=
+npm run dev
+```
 
 The Commander can restore the deterministic seed through **Reset demo** or `POST /api/demo/reset`. Reset is intended for demonstrations and development, not shared production use.
 
@@ -175,6 +195,10 @@ The capability matrix is available from `GET /api/audit/permissions`. Commander 
 ## Recommendation policy evaluation
 
 `app.evaluation.recommendation_baseline` compares the policy with nearest-feasible-source selection on the same deterministic simulated scenarios. The current four cases include one controlled case where the recommendation reaches recovery sooner, two ties, and one case with no feasible source; the baseline is faster in none. These results describe only the simulated cases and do not establish real-world performance. The evaluation code is separate from live operational decisions.
+
+## Roadmap and release boundary
+
+This delivery completes the planned work through Phase 5: FD001 model integration and uncertainty reporting, readiness indicators, cycle-based spares forecasting, and paired synthetic allocation-policy evaluation. Phase 6 telemetry replay and Phase 7 external maintenance/spares imports are deferred; this repository does not contain an end-to-end replay of real operational telemetry or governed external-agency imports. Future work also needs authenticated identities and read authorization, persistent transactional storage, real aircraft/engine/component mappings, validated post-maintenance telemetry, and operational/airworthiness validation. The current system remains a synthetic proof of concept, not a certified maintenance or flight-release system.
 
 ## Project structure and limitations
 

@@ -128,7 +128,7 @@ function RecommendationCard({ aircraft, refreshKey, onOpen, onApprove, busy }) {
           Health <b style={{ color: riskColor(h.risk_level) }}>{healthScoreText(h)}</b> · RUL <b>{rulText(h)}</b>
           <br />needs <b style={{ color: '#d8a93d' }}>{part}</b>
           {['human_selected', 'fixture_scenario'].includes(componentSource) ? <><br /><span style={{ color: '#8b94a3' }}>{componentSource === 'human_selected' ? 'Component selected during human triage; not an ML output.' : 'Component set for the synthetic operational scenario; not an ML output.'}</span></> : null}
-          {requiredByHours != null ? <> within <b>{requiredByHours}h</b></> : requiredByCycles != null ? <> within <b>{requiredByCycles} cycles</b></> : null}
+          {requiredByHours != null ? <> within <b>{requiredByHours}h</b></> : requiredByCycles != null ? <><br />Event RUL <b>{rulText({ rul: requiredByCycles, rul_unit: 'cycles' })}</b></> : null}
         </div>
       </div>
 

@@ -170,6 +170,28 @@ def forecast_resources(horizon_cycles: float = 30.0, *,
     committed_inventory = deepcopy(inventory_by_key)
     suggestion_inventory = deepcopy(inventory_by_key)
 
+    # Reserve a virtual planning hold for each base's own future demand before
+    # considering it as a donor. The hold lives only in the cloned suggestion
+    # ledger; the reported stock and repositories remain unchanged.
+    forecast_protection_by_key: dict[tuple[str, str], int] = {}
+    for key, inv in suggestion_inventory.items():
+        base_id, component = key
+        demand_rows = component_aircraft.get(base_id, {}).get(component, [])
+        expected_demand = sum(row["probability_within_horizon"] for row in demand_rows)
+        quantity = max(0, int(inv.get("quantity", 0) or 0))
+        reserved = max(0, int(inv.get("reserved", 0) or 0))
+        minimum = max(0, int(inv.get("minimum_reserve", 0) or 0))
+        condition = inv.get("condition_pct")
+        min_condition = PartRepository.min_condition_pct(component)
+        serviceable = (quantity > 0 and condition is not None
+                       and float(condition) >= min_condition)
+        uncommitted = max(0, quantity - reserved - minimum) if serviceable else 0
+        protected = min(uncommitted, math.ceil(expected_demand)) if expected_demand > 0 else 0
+        forecast_protection_by_key[key] = protected
+        # search_from_snapshot and donor debits both consult `reserved`, so an
+        # added virtual reserve prevents exports of locally protected units.
+        inv["reserved"] = reserved + protected
+
     # Existing unbound inbound moves count as planned supply for forecast
     # demand. Shipments earmarked for an open WO/aircraft remain dedicated to
     # that need and are never subtracted from future demand.
@@ -336,6 +358,9 @@ def forecast_resources(horizon_cycles: float = 30.0, *,
                 "min_condition_pct": min_condition,
                 "available_for_transfer": available_now,
                 "committed_available_for_transfer": committed_available,
+                "forecast_protected_units": forecast_protection_by_key.get(
+                    (base_id.lower(), component), 0,
+                ),
                 "inbound_pending_or_in_transit": incoming_by_key[(base_id.lower(), component)],
                 "inbound_proposed_for_open_work_orders": planned_work_order_inbound_by_key[(base_id.lower(), component)],
                 "inbound_work_order_committed": sum(
@@ -381,6 +406,7 @@ def forecast_resources(horizon_cycles: float = 30.0, *,
             "FD001 engine-to-component assignments are explicit demo assumptions, not model output or engineering approval.",
             "Expected demand remains fractional; projected shortfall rounds required units up after existing work-order, transfer, and serviceable unbound inbound commitments.",
             "Donor suggestions are assigned sequentially by base/component on one shared cloned ledger; they are deterministic, not a global optimizer.",
+            "Before donor suggestions, each base/component protects up to ceil(expected future demand) from its current serviceable uncommitted stock on a cloned planning ledger only; this is not an inventory reservation and does not change reported stock.",
             "Inbound shipments linked to an open work order or aircraft remain earmarked for that existing need and do not reduce future probabilistic demand.",
             "Suggestions do not create, approve, reserve, or move a transfer; live transfer creation revalidates current state and permissions.",
         ],

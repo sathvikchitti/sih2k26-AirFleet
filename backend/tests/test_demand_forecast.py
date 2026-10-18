@@ -95,6 +95,48 @@ def test_fractional_demand_and_feasible_whole_unit_move_are_pure(monkeypatch):
     assert _component(result, "bravo")["committed_available_for_transfer"] == 2
 
 
+@pytest.mark.parametrize(("charlie_stock", "expected_move"), [(1, 0), (3, 1)])
+def test_future_local_demand_is_held_before_a_base_can_donate(monkeypatch, charlie_stock, expected_move):
+    aircraft = [
+        {"id": "A17", "base_id": "alpha"},
+        {"id": "A19", "base_id": "alpha"},
+        {"id": "A21", "base_id": "charlie"},
+        {"id": "A23", "base_id": "charlie"},
+    ]
+    charlie_probability = 0.72
+    z_for_probability = 0.5828415072712162
+    predictions = {
+        "A17": _prediction("A17", 1, 100, 1),
+        "A19": _prediction("A19", 2, 100, 1),
+        "A21": _prediction("A21", 3, 100 - z_for_probability, 1),
+        "A23": _prediction("A23", 4, 100 - z_for_probability, 1),
+    }
+    state = _setup(monkeypatch, aircraft=aircraft, predictions=predictions)
+    monkeypatch.setenv(
+        "FD001_ENGINE_PART_MAPPING",
+        '{"1":"HP-204","2":"HP-204","3":"HP-204","4":"HP-204"}',
+    )
+    _line(state, "charlie", quantity=charlie_stock, condition=90)
+    before = deepcopy(state)
+
+    first = forecast.forecast_resources(100, _state=state, _predictions=predictions)
+    second = forecast.forecast_resources(100, _state=state, _predictions=predictions)
+    alpha = _component(first, "alpha")
+    charlie = _component(first, "charlie")
+
+    assert alpha["expected_demand"] == pytest.approx(1.0)
+    assert charlie["expected_demand"] == pytest.approx(1.44, abs=1e-6)
+    assert charlie["forecast_protected_units"] == min(charlie_stock, 2)
+    assert len(alpha["suggested_moves"]) == expected_move
+    if expected_move:
+        assert alpha["suggested_moves"][0]["source_base"] == "charlie"
+        assert alpha["suggested_moves"][0]["quantity"] == 1
+    else:
+        assert alpha["suggested_moves"] == []
+    assert first == second
+    assert state == before
+
+
 def test_open_work_order_excludes_duplicate_predictive_demand_and_ledger_claim(monkeypatch):
     preds = {key: _prediction(key, engine, 20, 5)
              for key, engine in (("A17", 1), ("A19", 2), ("A21", 3))}
