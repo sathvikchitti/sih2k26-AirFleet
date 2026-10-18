@@ -1,0 +1,17 @@
+# NASA C-MAPSS source data is kept local and separate from application code.
+CMAPSSData/
+
+# Generated, versioned model artifact and evaluation output.
+backend/models/*.joblib
+backend/models/*_metrics.json
+
+# Python test/runtime output.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local environment files may contain credentials. Keep sanitized examples versionable.
+.env
+.env.*
+!.env.example
+!.env.*.example

@@ -1,0 +1,25 @@
+{
+  "name": "fleet-readiness-frontend",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --port 5173",
+    "verify:views": "vite build --config vite.render-check.config.js && node dist-render-check/entry.js"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "4.3.4",
+    "autoprefixer": "10.4.20",
+    "postcss": "8.5.30",
+    "tailwindcss": "3.4.14",
+    "vite": "6.4.4"
+  },
+  "overrides": {
+    "postcss-selector-parser": "7.1.6"
+  }
+}
