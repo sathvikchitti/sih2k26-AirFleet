@@ -3,6 +3,7 @@ import { api, baseName, etaText, healthScoreText, rulText } from '../services/ap
 import { Badge, DataError, KpiCard, SectionTitle, riskColor } from '../components/ui.jsx';
 import ReadinessSimulationPanel from '../components/ReadinessSimulationPanel.jsx';
 import ResourceForecastPanel from '../components/ResourceForecastPanel.jsx';
+import EvaluationSummaryPanel from '../components/EvaluationSummaryPanel.jsx';
 
 const finiteMetric = value => typeof value === 'number' && Number.isFinite(value);
 const percentLabel = value => finiteMetric(value) ? `${value.toFixed(1)}%` : '—';
@@ -254,6 +255,7 @@ export default function CommanderDashboard({ onOpenAircraft, refreshKey }) {
       </div>
 
       <ResourceForecastPanel canRequestMove={false} refreshKey={refreshKey} />
+      <EvaluationSummaryPanel refreshKey={refreshKey} />
       <ReadinessSimulationPanel refreshKey={refreshKey} />
     </div>
   );

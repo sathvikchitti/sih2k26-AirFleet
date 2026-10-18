@@ -30,6 +30,7 @@ import LogisticsBasesView from '../../src/pages/views/LogisticsBasesView.jsx';
 import Commander from '../../src/pages/Commander.jsx';
 import { BaseMissionReadiness, MissionReadinessBand } from '../../src/pages/Commander.jsx';
 import { DemandStockChart, ForecastEligibilityNotice } from '../../src/components/ResourceForecastPanel.jsx';
+import { EvaluationIntervalChart, EvaluationResults } from '../../src/components/EvaluationSummaryPanel.jsx';
 import BaseManager from '../../src/pages/BaseManager.jsx';
 import Logistics from '../../src/pages/Logistics.jsx';
 import { compareTimeWeightedAvailability } from '../../src/components/ReadinessSimulationPanel.jsx';
@@ -184,6 +185,47 @@ if (!forecastEligibilityText.includes('No eligible cycle predictions overlap thi
   throw new Error('Forecast eligibility notice should distinguish unavailable predictions from predictions outside the selected horizon');
 }
 console.log('  PASS  forecast eligibility messaging distinguishes unavailable and outside-horizon predictions');
+
+const evaluationFixture = {
+  evaluation_type: 'deterministic_synthetic_simulation',
+  simulated: true,
+  real_operational_performance_claimed: false,
+  scenario_count: 300,
+  seed: 17,
+  horizon_hours: 48,
+  horizon_unit: 'hours',
+  scenario_fingerprint: 'test-fingerprint',
+  policies: {
+    proposed: { label: 'Production ranking', mean_time_weighted_availability_pct: 0, availability_pct_ci95: { lower: 0, upper: 0 }, mean_available_aircraft_hours: 0, mean_summed_censored_aircraft_hours_lost: 0, median_summed_censored_aircraft_hours_lost: 0, summed_censored_aircraft_hours_lost_ci95: { lower: 0, upper: 0 }, mean_completed_work_orders: 0, mean_unserved_work_orders: 0, unserved_work_order_rate_pct: 0, unserved_rate_ci95: { lower: 0, upper: 0 } },
+    nearest_fcfs: { label: 'Nearest feasible, first-come-first-served', mean_time_weighted_availability_pct: 60, availability_pct_ci95: { lower: 55, upper: 65 }, mean_available_aircraft_hours: 70, mean_summed_censored_aircraft_hours_lost: 20, median_summed_censored_aircraft_hours_lost: 18, summed_censored_aircraft_hours_lost_ci95: { lower: 16, upper: 24 }, mean_completed_work_orders: 2, mean_unserved_work_orders: 0, unserved_work_order_rate_pct: 0, unserved_rate_ci95: { lower: 0, upper: 0 } },
+    random_feasible: { label: 'Random feasible source', mean_time_weighted_availability_pct: null, availability_pct_ci95: { lower: null, upper: null }, mean_available_aircraft_hours: null, mean_summed_censored_aircraft_hours_lost: null, median_summed_censored_aircraft_hours_lost: null, summed_censored_aircraft_hours_lost_ci95: { lower: null, upper: null }, mean_completed_work_orders: null, mean_unserved_work_orders: null, unserved_work_order_rate_pct: null, unserved_rate_ci95: { lower: null, upper: null } },
+    local_only_procurement: { label: 'Local stock / procurement only', mean_time_weighted_availability_pct: 60, availability_pct_ci95: { lower: 55, upper: 65 }, mean_available_aircraft_hours: 70, mean_summed_censored_aircraft_hours_lost: 20, median_summed_censored_aircraft_hours_lost: 18, summed_censored_aircraft_hours_lost_ci95: { lower: 16, upper: 24 }, mean_completed_work_orders: 2, mean_unserved_work_orders: 0, unserved_work_order_rate_pct: 0, unserved_rate_ci95: { lower: 0, upper: 0 } },
+  },
+  comparison: {
+    reference_policy: 'proposed',
+    paired_deltas_vs_proposed: {
+      nearest_fcfs: { time_weighted_availability_pct_points: { mean: 60, ci95: { lower: 55, upper: 65 } }, summed_censored_aircraft_hours_lost: { mean: 20, ci95: { lower: 16, upper: 24 } }, unserved_work_order_rate_pct_points: { mean: 0, ci95: { lower: 0, upper: 0 } } },
+      random_feasible: {},
+      local_only_procurement: { time_weighted_availability_pct_points: { mean: 60, ci95: { lower: 55, upper: 65 } }, summed_censored_aircraft_hours_lost: { mean: 20, ci95: { lower: 16, upper: 24 } }, unserved_work_order_rate_pct_points: { mean: 0, ci95: { lower: 0, upper: 0 } } },
+    },
+  },
+  assumptions: ['Synthetic fixed-seed scenario fixture.'],
+};
+const evaluationHtml = renderToString(React.createElement(EvaluationResults, { summary: evaluationFixture }));
+const unsafeEvaluationHtml = renderToString(React.createElement(EvaluationResults, { summary: { ...evaluationFixture, real_operational_performance_claimed: true } }));
+const evaluationPolicyOrder = ['Production ranking', 'Nearest feasible, first-come-first-served', 'Random feasible source', 'Local stock / procurement only'];
+if (!evaluationHtml.includes('SYNTHETIC SIMULATION')
+  || !evaluationHtml.includes('95% percentile bootstrap intervals are over synthetic scenario units')
+  || !evaluationHtml.includes('No policy is declared a winner')
+  || !evaluationHtml.includes('>100</text>')
+  || !evaluationHtml.includes('0.00 (0.00) · 0.00–0.00')
+  || evaluationPolicyOrder.some((label, index) => evaluationHtml.indexOf(label) < 0 || (index > 0 && evaluationHtml.indexOf(label) < evaluationHtml.indexOf(evaluationPolicyOrder[index - 1])))
+  || !evaluationHtml.includes('Nearest feasible, first-come-first-served</td><td>60.00 (55.00–65.00)')
+  || !unsafeEvaluationHtml.includes('comparative metrics are withheld')
+  || unsafeEvaluationHtml.includes('<svg')) {
+  throw new Error('Evaluation card should show synthetic four-policy metrics and CIs in stable order, preserve zero/null, and withhold unconfirmed data');
+}
+console.log('  PASS  synthetic four-policy evaluation rendering (intervals, zero/null, order, and provenance guard)');
 
 const CASES = [
   ['commander/dashboard', Commander, props],

@@ -79,6 +79,8 @@ def _work_order_schedule(state: dict, plan: dict) -> tuple[dict[str, float], dic
             transfer_eta = 0.0
         elif allocation_status == "PROPOSED_LOCAL_ALLOCATION":
             transfer_eta = 0.0
+        elif allocation_status == "PROPOSED_LOCAL_PROCUREMENT":
+            transfer_eta = max(0.0, float(allocation.get("procurement_eta_hours") or 0.0))
         elif allocation_status == "PROPOSED_REMOTE_TRANSFER":
             recommendation = allocation.get("recommended") or {}
             transfer_eta = max(0.0, float(recommendation.get("eta_hours") or 0.0))
@@ -152,6 +154,28 @@ def _curve_for_policy(state: dict, predictions: dict[str, dict], plan: dict,
         previous_hour = hour
         previous_available = available
     return curve
+
+
+def simulate_policy_from_snapshot(state_snapshot: dict[str, Any],
+                                  prediction_map: dict[str, dict],
+                                  plan: dict, horizon_hours: float = 48.0) -> dict[str, Any]:
+    """Return one pure policy curve and metrics for isolated evaluations."""
+    horizon = float(horizon_hours)
+    if not math.isfinite(horizon) or horizon < 0 or horizon > 168:
+        raise ValueError("horizon_hours must be finite and between 0 and 168")
+    curve = _curve_for_policy(state_snapshot, prediction_map, plan, horizon)
+    area = float(curve[-1]["cumulative_available_aircraft_hours"])
+    total = int(curve[-1]["total_aircraft"])
+    return {
+        "curve": curve,
+        "metrics": {
+            "available_aircraft_hours": round(area, 8),
+            "aircraft_downtime_hours": round(max(0.0, total * horizon - area), 8),
+            "time_weighted_average_availability_pct": round(area / (total * horizon) * 100, 4)
+            if total and horizon > 0 else None,
+            "work_orders_completed_by_horizon": len(curve[-1]["completed_work_order_ids"]),
+        },
+    }
 
 
 def simulate_readiness_from_snapshot(state_snapshot: dict[str, Any],

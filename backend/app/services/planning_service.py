@@ -9,16 +9,19 @@ from __future__ import annotations
 
 from collections import defaultdict
 from copy import deepcopy
+import math
+import random
 from typing import Any
 
 from ..domain.enums import PRIORITY_ORDER, TransferStatus, WorkOrderStatus
 from ..repositories import OPEN_WORK_ORDER_STATUSES, PartRepository, snapshot
 from .ml import get_provider, predict_validated
 from .recommendation_service import evaluate_candidates_from_snapshot
-from .resource_service import search_from_snapshot
+from .resource_service import ResourceContext, search_from_snapshot
 
 
-def _open_orders(state: dict[str, Any], selected_ids: list[str] | None) -> tuple[list[dict], list[dict], list[str]]:
+def _open_orders(state: dict[str, Any], selected_ids: list[str] | None,
+                 order_policy: str = "priority") -> tuple[list[dict], list[dict], list[str]]:
     all_open = [row for row in state.get("work_orders", [])
                 if row.get("status") in OPEN_WORK_ORDER_STATUSES]
     if selected_ids is None:
@@ -29,7 +32,12 @@ def _open_orders(state: dict[str, Any], selected_ids: list[str] | None) -> tuple
         open_ids = {str(row.get("id", "")).upper() for row in all_open}
         unknown = [value for value in requested if value not in open_ids]
 
+    if order_policy not in {"priority", "first_come_first_served"}:
+        raise ValueError(f"unsupported allocation order policy: {order_policy}")
+
     def order(row: dict) -> tuple:
+        if order_policy == "first_come_first_served":
+            return (str(row.get("created_at") or ""), str(row.get("id") or ""))
         priority = PRIORITY_ORDER.get(row.get("priority"), 0)
         return (-int(priority), str(row.get("created_at") or ""), str(row.get("id") or ""))
 
@@ -49,13 +57,36 @@ def _available(inv: dict | None) -> int:
                - int(inv.get("minimum_reserve", 0)))
 
 
-def _local_usable(inv: dict | None, component: str | None) -> bool:
+def _part_min_condition(component: str, resource_context: ResourceContext | None) -> int:
+    value = (resource_context.part_min_condition(component) if resource_context
+             else PartRepository.min_condition_pct(component))
+    if value is None:
+        raise ValueError(f"unknown part in planning context: {component}")
+    return int(value)
+
+
+def _part_is_known(component: str, resource_context: ResourceContext | None) -> bool:
+    return (resource_context.part(component) is not None if resource_context
+            else PartRepository.get(component) is not None)
+
+
+def _local_usable(inv: dict | None, component: str | None,
+                  resource_context: ResourceContext | None = None) -> bool:
     return bool(inv and component and _available(inv) > 0
-                and int(inv.get("condition_pct", 0)) >= PartRepository.min_condition_pct(component))
+                and int(inv.get("condition_pct", 0)) >= _part_min_condition(component, resource_context))
+
+
+def _procurement_condition_compatible(inv: dict | None, component: str,
+                                      resource_context: ResourceContext | None) -> bool:
+    """Do not claim replenishment repairs a positive, below-minimum pooled line."""
+    if not inv or int(inv.get("quantity", 0)) <= 0:
+        return True
+    return int(inv.get("condition_pct", 0)) >= _part_min_condition(component, resource_context)
 
 
 def _arrival_serviceability(transfer: dict, destination_inventory: dict | None,
-                            component: str) -> dict[str, Any]:
+                            component: str,
+                            resource_context: ResourceContext | None = None) -> dict[str, Any]:
     """Project whether an in-transit unit will satisfy current start rules.
 
     Inventory condition is pooled by base/component. Match receipt semantics:
@@ -96,7 +127,7 @@ def _arrival_serviceability(transfer: dict, destination_inventory: dict | None,
     available_after_receipt = max(
         0, quantity_before + incoming_quantity - reserved - minimum_reserve,
     )
-    minimum_condition = PartRepository.min_condition_pct(component)
+    minimum_condition = _part_min_condition(component, resource_context)
     if projected_condition is None or projected_condition < minimum_condition:
         reason = "DESTINATION_CONDITION_BELOW_MINIMUM"
     elif available_after_receipt <= 0:
@@ -129,17 +160,28 @@ def allocation_preview(work_order_ids: list[str] | None = None, *,
                        source_policy: str = "proposed",
                        allocate_new: bool = True,
                        _state: dict[str, Any] | None = None,
-                       _predictions: dict[str, dict] | None = None) -> dict[str, Any]:
+                       _predictions: dict[str, dict] | None = None,
+                       resource_context: ResourceContext | None = None,
+                       order_policy: str = "priority",
+                       procurement_lead_hours: float | None = None,
+                       _rng: random.Random | None = None) -> dict[str, Any]:
     """Allocate shared donor/local stock on a clone, using priority/age/id.
 
     Feasible candidates and their costs come from the same search and ranking
     helpers used by single-work-order recommendations. Local stock and linked
     transfer lifecycle state are accounted for before proposing new transfers.
     """
-    if source_policy not in {"proposed", "nearest_feasible"}:
+    if source_policy not in {"proposed", "nearest_feasible", "random_feasible", "local_only_procurement"}:
         raise ValueError(f"unsupported allocation source policy: {source_policy}")
+    if procurement_lead_hours is not None and (
+        isinstance(procurement_lead_hours, bool)
+        or not isinstance(procurement_lead_hours, (int, float))
+        or not math.isfinite(float(procurement_lead_hours))
+        or procurement_lead_hours < 0
+    ):
+        raise ValueError("procurement_lead_hours must be a finite nonnegative number")
     state = _state if _state is not None else snapshot()
-    all_open_orders, selected_work_orders, unknown_ids = _open_orders(state, work_order_ids)
+    all_open_orders, selected_work_orders, unknown_ids = _open_orders(state, work_order_ids, order_policy)
     ids_by_aircraft = sorted({str(row["aircraft_id"]).upper() for row in selected_work_orders
                               if row.get("aircraft_id")})
     if _predictions is None:
@@ -226,7 +268,7 @@ def allocation_preview(work_order_ids: list[str] | None = None, *,
                     {**transfer,
                      "_work_order_base": work_order.get("base_id"),
                      "_work_order_aircraft": work_order.get("aircraft_id")},
-                    inv, component,
+                    inv, component, resource_context,
                 )
             rows_by_id[wo_id] = _allocation_row(
                 work_order, status, transfer_id=transfer.get("id"),
@@ -241,7 +283,7 @@ def allocation_preview(work_order_ids: list[str] | None = None, *,
         }:
             if work_order.get("resource_reserved"):
                 status = "RECEIVED_RESOURCE_RESERVED"
-            elif _local_usable(inv, component):
+            elif _local_usable(inv, component, resource_context):
                 inv["quantity"] = int(inv.get("quantity", 0)) - 1
                 status = "RECEIVED_RESOURCE_EARMARKED"
             else:
@@ -251,7 +293,7 @@ def allocation_preview(work_order_ids: list[str] | None = None, *,
                     "transfer_ids": [t.get("id") for t in received],
                     "reason": ("RECEIVED_RESOURCE_BELOW_MINIMUM_CONDITION"
                                if inv and int(inv.get("condition_pct", 0))
-                               < PartRepository.min_condition_pct(component)
+                               < _part_min_condition(component, resource_context)
                                else "RECEIVED_RESOURCE_NOT_FREE_AT_DESTINATION"),
                 })
             rows_by_id[wo_id] = _allocation_row(
@@ -267,7 +309,7 @@ def allocation_preview(work_order_ids: list[str] | None = None, *,
             # virtual claim to avoid offering that same local unit elsewhere.
             if work_order.get("resource_reserved"):
                 status = "IN_PROGRESS_RESOURCE_RESERVED"
-            elif component and _local_usable(inv, component):
+            elif component and _local_usable(inv, component, resource_context):
                 inv["quantity"] = int(inv.get("quantity", 0)) - 1
                 status = "IN_PROGRESS_LOCAL_EARMARKED"
             else:
@@ -283,7 +325,7 @@ def allocation_preview(work_order_ids: list[str] | None = None, *,
         if work_order.get("status") in {
             WorkOrderStatus.RESOURCE_AVAILABLE.value, WorkOrderStatus.SCHEDULED.value,
         }:
-            if _local_usable(inv, component):
+            if _local_usable(inv, component, resource_context):
                 inv["quantity"] = int(inv.get("quantity", 0)) - 1
                 status = "EXISTING_LOCAL_RESOURCE_EARMARKED"
             else:
@@ -310,13 +352,18 @@ def allocation_preview(work_order_ids: list[str] | None = None, *,
         if not component:
             rows_by_id[wo_id] = _allocation_row(work_order, "NO_COMPONENT_SELECTED")
             continue
+        if not _part_is_known(str(component), resource_context):
+            rows_by_id[wo_id] = _allocation_row(
+                work_order, "NO_FEASIBLE_SOURCE", candidates=[], rejected=[], recommended=None,
+            )
+            continue
 
         local_inv = inventory_by_key.get((str(work_order.get("base_id", "")).lower(),
                                           str(component).upper()))
-        minimum_condition = PartRepository.min_condition_pct(str(component))
+        minimum_condition = _part_min_condition(str(component), resource_context)
         local_available = _available(local_inv)
         local_condition = int(local_inv.get("condition_pct", 0)) if local_inv else 0
-        if _local_usable(local_inv, str(component)):
+        if _local_usable(local_inv, str(component), resource_context):
             local_inv["quantity"] = int(local_inv.get("quantity", 0)) - 1
             rows_by_id[wo_id] = _allocation_row(
                 work_order, "PROPOSED_LOCAL_ALLOCATION", source_base=work_order["base_id"],
@@ -325,7 +372,33 @@ def allocation_preview(work_order_ids: list[str] | None = None, *,
             )
             continue
 
-        found = search_from_snapshot(work_order, ledger)
+        # The evaluation's named local-procurement policy never searches a
+        # remote donor. Other policies may use the same explicit fallback only
+        # after the shared canonical search returns no feasible donor.
+        if source_policy == "local_only_procurement":
+            if (procurement_lead_hours is not None
+                    and _procurement_condition_compatible(local_inv, str(component), resource_context)):
+                minimum_to_order = max(
+                    1, int(local_inv.get("reserved", 0) if local_inv else 0)
+                    + int(local_inv.get("minimum_reserve", 0) if local_inv else 0)
+                    + 1 - int(local_inv.get("quantity", 0) if local_inv else 0),
+                )
+                rows_by_id[wo_id] = _allocation_row(
+                    work_order, "PROPOSED_LOCAL_PROCUREMENT",
+                    source_base=work_order["base_id"],
+                    procurement_eta_hours=float(procurement_lead_hours),
+                    procurement_quantity=minimum_to_order,
+                    procurement_condition_pct=minimum_condition,
+                    procurement_assumption=True,
+                )
+            else:
+                rows_by_id[wo_id] = _allocation_row(
+                    work_order, "NO_FEASIBLE_SOURCE", local_quantity_available_before=local_available,
+                    candidates=[], rejected=[], recommended=None,
+                )
+            continue
+
+        found = search_from_snapshot(work_order, ledger, resource_context=resource_context)
         evaluation = evaluate_candidates_from_snapshot(
             work_order, predictions[str(work_order["aircraft_id"]).upper()], found,
         )
@@ -337,7 +410,30 @@ def allocation_preview(work_order_ids: list[str] | None = None, *,
                                  float(row.get("eta_hours") or 0),
                                  str(row.get("source_base") or row.get("base_id") or "")),
             )
+        elif source_policy == "random_feasible" and evaluation.get("candidates"):
+            if _rng is None:
+                raise ValueError("random_feasible requires a seeded _rng")
+            recommended = _rng.choice(evaluation["candidates"])
         if recommended is None:
+            if (procurement_lead_hours is not None
+                    and _part_is_known(str(component), resource_context)
+                    and _procurement_condition_compatible(local_inv, str(component), resource_context)):
+                minimum_to_order = max(
+                    1, int(local_inv.get("reserved", 0) if local_inv else 0)
+                    + int(local_inv.get("minimum_reserve", 0) if local_inv else 0)
+                    + 1 - int(local_inv.get("quantity", 0) if local_inv else 0),
+                )
+                rows_by_id[wo_id] = _allocation_row(
+                    work_order, "PROPOSED_LOCAL_PROCUREMENT",
+                    source_base=work_order["base_id"],
+                    procurement_eta_hours=float(procurement_lead_hours),
+                    procurement_quantity=minimum_to_order,
+                    procurement_condition_pct=minimum_condition,
+                    procurement_assumption=True,
+                    local_quantity_available_before=local_available,
+                    candidates=evaluation["candidates"], rejected=evaluation["rejected"],
+                )
+                continue
             rows_by_id[wo_id] = _allocation_row(
                 work_order, "NO_FEASIBLE_SOURCE", local_quantity_available_before=local_available,
                 candidates=evaluation["candidates"], rejected=evaluation["rejected"],
@@ -385,9 +481,9 @@ def allocation_preview(work_order_ids: list[str] | None = None, *,
     return {
         "snapshot_type": "read_only_inventory_snapshot",
         "source_policy": source_policy if allocate_new else "no_action",
-        "policy": ("priority_then_created_at_then_work_order_id; new source ranked by distance, ETA, base ID"
+        "policy": (f"{order_policy}; new source ranked by distance, ETA, base ID"
                    if source_policy == "nearest_feasible" and allocate_new else
-                   "priority_then_created_at_then_work_order_id; proposed source uses existing downtime ranking"),
+                   f"{order_policy}; {source_policy} source selection"),
         "selected_work_order_ids": [row["id"] for row in selected_work_orders],
         "commitment_work_order_ids": [row["id"] for row in all_open_orders
                                       if str(row.get("id", "")).upper() in preallocated],

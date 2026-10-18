@@ -117,3 +117,35 @@ test('cycle resource forecast preserves fractional demand and propagates provide
     globalThis.fetch = originalFetch;
   }
 });
+
+test('synthetic evaluation summary is fetched strictly and propagates backend errors', async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedUrl = '';
+  const summary = {
+    evaluation_type: 'deterministic_synthetic_simulation',
+    simulated: true,
+    real_operational_performance_claimed: false,
+    scenario_count: 300,
+    policies: { proposed: { mean_time_weighted_availability_pct: 60 } },
+  };
+  try {
+    globalThis.fetch = async url => {
+      requestedUrl = String(url);
+      return { ok: true, status: 200, json: async () => summary };
+    };
+    const actual = await api.getEvaluationSummary();
+    assert.equal(requestedUrl, '/api/evaluation/summary');
+    assert.equal(actual.simulated, true);
+    assert.equal(actual.real_operational_performance_claimed, false);
+    assert.equal(actual.policies.proposed.mean_time_weighted_availability_pct, 60);
+
+    globalThis.fetch = async () => ({
+      ok: false,
+      status: 503,
+      json: async () => ({ detail: 'Evaluation unavailable' }),
+    });
+    await assert.rejects(api.getEvaluationSummary(), error => error.status === 503);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

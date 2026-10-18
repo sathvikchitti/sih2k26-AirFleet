@@ -8,6 +8,7 @@ from . import (
     aircraft,
     audit,
     bases,
+    evaluation,
     health,
     inventory,
     maintenance,
@@ -16,6 +17,6 @@ from . import (
 )
 
 __all__ = [
-    "health", "aircraft", "bases", "inventory",
+    "health", "aircraft", "bases", "evaluation", "inventory",
     "maintenance", "transfers", "recommendations", "audit",
 ]

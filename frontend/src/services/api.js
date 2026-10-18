@@ -231,6 +231,9 @@ export const api = {
     (workOrderIds || []).forEach(id => params.append('work_order_ids', id));
     return fetchJSON('/api/fleet/readiness-simulation?' + params.toString());
   },
+  // Offline synthetic scenario results are a strict backend contract. Never
+  // replace evaluation output with fallback operational/demo data.
+  getEvaluationSummary: async () => fetchJSON('/api/evaluation/summary'),
   getWorkOrderRecommendation: async (woId) => {
     return fetchJSON('/api/work-orders/' + woId + '/recommendation');
   },

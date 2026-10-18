@@ -11,6 +11,8 @@ amount of urgency should ever make an unserviceable part look attractive.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from ..data import BASES, distance_km, eta_hours
 from ..domain import knowledge
 from ..domain.enums import Priority, WorkOrderStatus
@@ -33,6 +35,44 @@ INFEASIBLE_UNKNOWN_PART = "PART_NOT_IN_CATALOGUE"
 INFEASIBLE_SAME_BASE = "SAME_BASE"
 
 
+@dataclass(frozen=True)
+class ResourceContext:
+    """Immutable catalog and route inputs for an isolated planning scenario.
+
+    Normal application calls omit this and retain the repository-backed demo
+    catalog. Evaluation scenarios provide values here rather than mutating
+    module globals or repositories.
+    """
+
+    bases: tuple[tuple[str, str], ...]
+    parts: tuple[tuple[str, str, int], ...]
+    routes: tuple[tuple[str, str, float, float], ...]
+
+    def base_rows(self) -> list[dict]:
+        return [{"id": base_id, "name": name} for base_id, name in self.bases]
+
+    def part(self, part_number: str) -> tuple[str, int] | None:
+        target = str(part_number).upper()
+        return next(((name, condition) for pn, name, condition in self.parts if pn == target), None)
+
+    def route(self, origin: str, destination: str) -> tuple[float, float]:
+        origin, destination = origin.lower(), destination.lower()
+        if origin == destination:
+            return 0.0, 0.0
+        for left, right, distance, eta in self.routes:
+            if (left == origin and right == destination) or (left == destination and right == origin):
+                return float(distance), float(eta)
+        raise ValueError(f"resource context has no route between {origin} and {destination}")
+
+    def part_min_condition(self, part_number: str) -> int | None:
+        part = self.part(part_number)
+        return part[1] if part else None
+
+    def part_name(self, part_number: str) -> str | None:
+        part = self.part(part_number)
+        return part[0] if part else None
+
+
 def part_min_condition(part_number: str) -> int:
     return PartRepository.min_condition_pct(part_number)
 
@@ -46,7 +86,8 @@ def search(work_order_id: str) -> dict:
     return search_from_snapshot(work_order, InventoryRepository.list_all())
 
 
-def search_from_snapshot(work_order: dict, inventory_rows: list[dict]) -> dict:
+def search_from_snapshot(work_order: dict, inventory_rows: list[dict], *,
+                         resource_context: ResourceContext | None = None) -> dict:
     """Run the canonical hard-constraint search against supplied inventory.
 
     `inventory_rows` is read-only input. Callers can pass a cloned/virtual
@@ -69,7 +110,9 @@ def search_from_snapshot(work_order: dict, inventory_rows: list[dict]) -> dict:
             "infeasible": [],
         }
 
-    if PartRepository.get(component) is None:
+    context_part = resource_context.part(component) if resource_context else None
+    if (context_part is None if resource_context else PartRepository.get(component) is None):
+        bases = resource_context.base_rows() if resource_context else BASES
         return {
             "work_order_id": work_order_id,
             "aircraft_id": work_order["aircraft_id"],
@@ -80,16 +123,18 @@ def search_from_snapshot(work_order: dict, inventory_rows: list[dict]) -> dict:
                 "base_id": b["id"], "part_number": component, "feasible": False,
                 "reason": INFEASIBLE_UNKNOWN_PART,
                 "detail": f"{component} is not in the parts catalogue",
-            } for b in BASES],
+            } for b in bases],
         }
 
     home = work_order["base_id"]
-    min_cond = part_min_condition(component)
+    min_cond = (resource_context.part_min_condition(component) if resource_context
+                else part_min_condition(component))
+    bases = resource_context.base_rows() if resource_context else BASES
 
     candidates: list[dict] = []
     infeasible: list[dict] = []
 
-    for base in BASES:
+    for base in bases:
         if base["id"] == home:
             # Local stock is handled separately: no transfer required.
             continue
@@ -100,14 +145,15 @@ def search_from_snapshot(work_order: dict, inventory_rows: list[dict]) -> dict:
         minimum_reserve = int(inv.get("minimum_reserve", 0)) if inv else 0
         condition = int(inv.get("condition_pct", 0)) if inv else 0
         transferable = max(0, quantity - reserved - minimum_reserve)
-        distance = distance_km(home, base["id"])
-        eta = eta_hours(home, base["id"])
+        distance, eta = (resource_context.route(home, base["id"]) if resource_context
+                         else (distance_km(home, base["id"]), eta_hours(home, base["id"])))
+        part_name = resource_context.part_name(component) if resource_context else PartRepository.name(component)
 
         candidate = {
             "base_id": base["id"],
             "base_name": base["name"],
             "part_number": component,
-            "part_name": PartRepository.name(component),
+            "part_name": part_name,
             "quantity_available": transferable,
             "quantity_total": quantity,
             "reserved_quantity": reserved,
@@ -151,13 +197,13 @@ def search_from_snapshot(work_order: dict, inventory_rows: list[dict]) -> dict:
         "aircraft_id": work_order["aircraft_id"],
         "home_base": home,
         "required_component": component,
-        "part_name": PartRepository.name(component),
+        "part_name": resource_context.part_name(component) if resource_context else PartRepository.name(component),
         "min_condition_pct": min_cond,
         "local_available": local_available,
         "local_condition_pct": int(local.get("condition_pct", 0)) if local else 0,
         "candidates": candidates,
         "infeasible": infeasible,
-        "bases_searched": [b["id"] for b in BASES],
+        "bases_searched": [b["id"] for b in bases],
     }
 
 
