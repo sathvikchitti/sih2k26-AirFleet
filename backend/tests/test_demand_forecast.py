@@ -347,6 +347,18 @@ def test_mapping_rejects_non_engine_or_unknown_catalog_components(monkeypatch):
         knowledge.fd001_engine_part_mapping()
 
 
+def test_default_fd001_mapping_alternates_engine_category_by_example_id(monkeypatch):
+    monkeypatch.delenv("FD001_ENGINE_PART_MAPPING", raising=False)
+
+    mapping, source = knowledge.fd001_engine_part_mapping()
+
+    assert mapping == {
+        engine_id: "HP-204" if engine_id % 2 else "OE-310"
+        for engine_id in range(1, 11)
+    }
+    assert source == "built_in_demo_assumption"
+
+
 def test_mapping_allows_only_explicit_engine_category_override(monkeypatch):
     monkeypatch.setenv("FD001_ENGINE_PART_MAPPING", '{"1":"OE-310"}')
     mapping, source = knowledge.fd001_engine_part_mapping()

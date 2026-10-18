@@ -110,7 +110,12 @@ _RULES_BY_SUBSYSTEM = {_normalise(r.subsystem): r for r in MAINTENANCE_RULES}
 # as a model diagnosis. Keep the default explicit and limited to the ten
 # mapped FD001 example engines. Deployments may provide a JSON object such as
 # {"1":"HP-204","2":"OE-310"} via FD001_ENGINE_PART_MAPPING.
-FD001_ENGINE_PART_MAPPING: dict[int, str] = {engine_id: "HP-204" for engine_id in range(1, 11)}
+# This alternation is a demo-only category mapping, not a diagnosis: odd
+# example engine IDs use the HP-204 category and even IDs use OE-310.
+FD001_ENGINE_PART_MAPPING: dict[int, str] = {
+    engine_id: "HP-204" if engine_id % 2 else "OE-310"
+    for engine_id in range(1, 11)
+}
 
 
 def fd001_engine_part_mapping() -> tuple[dict[int, str], str]:
