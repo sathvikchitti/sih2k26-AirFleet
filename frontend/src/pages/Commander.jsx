@@ -3,6 +3,71 @@ import { api, baseName, etaText, healthScoreText, rulText } from '../services/ap
 import { Badge, DataError, KpiCard, SectionTitle, riskColor } from '../components/ui.jsx';
 import ReadinessSimulationPanel from '../components/ReadinessSimulationPanel.jsx';
 
+const finiteMetric = value => typeof value === 'number' && Number.isFinite(value);
+const percentLabel = value => finiteMetric(value) ? `${value.toFixed(1)}%` : '—';
+const countLabel = value => finiteMetric(value) ? String(value) : '—';
+const readinessColor = (rate, target, gap) => {
+  if (!finiteMetric(rate) || !finiteMetric(target) || !finiteMetric(gap)) return '#8b94a3';
+  if (rate === 0 && target > 0) return '#e05c5c';
+  if (gap === 0 && rate >= target) return '#3fb97f';
+  if (gap > 0) return '#d8a93d';
+  return '#8b94a3';
+};
+
+export function MissionReadinessBand({ fleet }) {
+  if (!fleet) return null;
+  const metrics = [
+    ['Mission capable', percentLabel(fleet.mission_capable_rate_pct), 'Currently AVAILABLE aircraft'],
+    ['Readiness target', percentLabel(fleet.readiness_target_pct), 'Backend-defined target'],
+    ['Gap to target', finiteMetric(fleet.gap_to_target_pct) ? `${fleet.gap_to_target_pct.toFixed(1)} pp` : '—', 'Percentage-point shortfall'],
+    ['NMCS proxy', countLabel(fleet.nmcs_count), 'Aircraft blocked by component supply'],
+    ['Down for maintenance', countLabel(fleet.aircraft_down_for_maintenance), 'MAINTENANCE + WAITING status'],
+  ];
+  return (
+    <section aria-label="Mission readiness metrics" style={{ marginTop: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(145px,1fr))', gap: 10 }}>
+        {metrics.map(([label, value, sub]) => (
+          <div key={label} className="ops-card" style={{ padding: '10px 12px' }}>
+            <div className="ops-label">{label}</div>
+            <div style={{ fontSize: 23, fontWeight: 800, color: label === 'Gap to target' ? readinessColor(fleet.mission_capable_rate_pct, fleet.readiness_target_pct, fleet.gap_to_target_pct) : '#e6e9ee', marginTop: 3 }}>{value}</div>
+            <div style={{ fontSize: 11, color: '#8b94a3', marginTop: 3 }}>{sub}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function BaseMissionReadiness({ base }) {
+  const rate = base?.mission_capable_rate_pct;
+  const target = base?.readiness_target_pct;
+  const hasRate = finiteMetric(rate);
+  const hasTarget = finiteMetric(target);
+  const metricColor = readinessColor(rate, target, base?.gap_to_target_pct);
+  const barWidth = hasRate ? Math.max(0, Math.min(100, rate)) : 0;
+  const targetX = hasTarget ? Math.max(0, Math.min(100, target)) : null;
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, fontSize: 12 }}>
+        <span style={{ color: '#8b94a3' }}>Mission capable</span>
+        <b>{percentLabel(rate)}</b>
+      </div>
+      <svg viewBox="0 0 100 14" role="img" aria-label={`${base?.name || base?.id || 'Base'} mission capable ${percentLabel(rate)}${hasTarget ? `, readiness target ${percentLabel(target)}` : ', readiness target unavailable'}`} style={{ display: 'block', width: '100%', height: 20, marginTop: 4, overflow: 'visible' }}>
+        <rect x="0" y="3" width="100" height="8" rx="3" fill="#0a0e13" stroke="#2a3444" />
+        {hasRate && <rect x="0" y="3" width={barWidth} height="8" rx="3" fill={metricColor} />}
+        {hasTarget && <line x1={targetX} x2={targetX} y1="0" y2="14" stroke="#e6e9ee" strokeWidth="1.6" strokeDasharray="2 1" />}
+      </svg>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11, color: '#8b94a3', marginTop: 2 }}>
+        <span style={{ color: metricColor }}>{finiteMetric(base?.gap_to_target_pct) ? `Gap ${base.gap_to_target_pct.toFixed(1)} pp` : 'Gap unavailable'}</span>
+        <span>{hasTarget ? `Target ${percentLabel(target)}` : 'Target unavailable'}</span>
+      </div>
+      <div style={{ fontSize: 11, color: '#8b94a3', marginTop: 6 }}>
+        {countLabel(base?.nmcs_count)} NMCS supply-blocked · {countLabel(base?.aircraft_down_for_maintenance)} down for maintenance
+      </div>
+    </div>
+  );
+}
+
 export default function CommanderDashboard({ onOpenAircraft, refreshKey }) {
   const [fleet, setFleet] = React.useState(null);
   const [aircraft, setAircraft] = React.useState([]);
@@ -94,6 +159,7 @@ export default function CommanderDashboard({ onOpenAircraft, refreshKey }) {
           <KpiCard label="Resource Shortages" value={shortages ? shortages.length : '—'} sub={shortageError ? 'unavailable' : 'from resource demand'} accent="#e05c5c" />
         </div>
       )}
+      {fleet && <MissionReadinessBand fleet={fleet} />}
       {scenario?.operational_data_synthetic && scenario?.scenario_id && (
         <div style={{ marginTop: 10, fontSize: 12, color: '#8b94a3' }}>
           {scenario.label || 'Synthetic fleet operations scenario'} · operational states are synthetic; aircraft health and RUL remain model predictions.
@@ -153,6 +219,7 @@ export default function CommanderDashboard({ onOpenAircraft, refreshKey }) {
             <div style={{ fontWeight: 800 }}>{b.name}</div>
             <div style={{ fontSize: 26, fontWeight: 800, color: b.availability_pct >= 85 ? '#3fb97f' : '#d8a93d' }}>{b.availability_pct}%</div>
             <div style={{ fontSize: 12, color: '#8b94a3' }}>{b.available}/{b.aircraft_count} available · {b.at_risk} at risk · {b.maintenance} mx</div>
+            <BaseMissionReadiness base={b} />
           </div>
         ))}
       </div>

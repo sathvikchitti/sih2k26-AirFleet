@@ -28,6 +28,7 @@ import TransfersView from '../../src/pages/views/TransfersView.jsx';
 import MaintenanceResourcesView from '../../src/pages/views/MaintenanceResourcesView.jsx';
 import LogisticsBasesView from '../../src/pages/views/LogisticsBasesView.jsx';
 import Commander from '../../src/pages/Commander.jsx';
+import { BaseMissionReadiness, MissionReadinessBand } from '../../src/pages/Commander.jsx';
 import BaseManager from '../../src/pages/BaseManager.jsx';
 import Logistics from '../../src/pages/Logistics.jsx';
 import { compareTimeWeightedAvailability } from '../../src/components/ReadinessSimulationPanel.jsx';
@@ -123,6 +124,41 @@ if ((driverHtml.match(/<b>/g) || []).length !== 5
   throw new Error('Top sensor drivers should be bounded, signed, reference-labelled, and unavailable when absent');
 }
 console.log('  PASS  FD001 RUL envelope and sensor driver evidence rendering (populated, null, and zero cases)');
+
+const readinessHtml = renderToString(React.createElement(MissionReadinessBand, {
+  fleet: {
+    mission_capable_rate_pct: 60,
+    readiness_target_pct: 75,
+    gap_to_target_pct: 15,
+    nmcs_count: 2,
+    aircraft_down_for_maintenance: 1,
+  },
+}));
+const readinessMissingHtml = renderToString(React.createElement(MissionReadinessBand, {
+  fleet: { mission_capable_rate_pct: null, readiness_target_pct: null, gap_to_target_pct: null, nmcs_count: null, aircraft_down_for_maintenance: null },
+}));
+const baseReadinessHtml = renderToString(React.createElement(BaseMissionReadiness, {
+  base: { id: 'alpha', name: 'Base Alpha', mission_capable_rate_pct: 0, readiness_target_pct: 75, gap_to_target_pct: 75, nmcs_count: 0, aircraft_down_for_maintenance: 0 },
+}));
+const baseReadinessMissingHtml = renderToString(React.createElement(BaseMissionReadiness, {
+  base: { id: 'bravo', mission_capable_rate_pct: null, readiness_target_pct: null, gap_to_target_pct: null, nmcs_count: null, aircraft_down_for_maintenance: null },
+}));
+const baseReadinessMetHtml = renderToString(React.createElement(BaseMissionReadiness, {
+  base: { id: 'charlie', mission_capable_rate_pct: 75, readiness_target_pct: 75, gap_to_target_pct: 0, nmcs_count: 0, aircraft_down_for_maintenance: 0 },
+}));
+if (!readinessHtml.includes('60.0%') || !readinessHtml.includes('15.0 pp')
+  || !readinessHtml.includes('NMCS proxy') || !readinessHtml.includes('Down for maintenance')
+  || !readinessMissingHtml.includes('—') || readinessMissingHtml.includes('0.0%')
+  || !baseReadinessHtml.includes('0.0%') || !baseReadinessHtml.includes('Target 75.0%')
+  || !baseReadinessHtml.includes('fill="#e05c5c"') || !baseReadinessHtml.includes('color:#e05c5c')
+  || !baseReadinessMetHtml.includes('fill="#3fb97f"')
+  || !readinessHtml.includes('color:#d8a93d')
+  || !baseReadinessMissingHtml.includes('color:#8b94a3')
+  || !baseReadinessMissingHtml.includes('Gap unavailable') || !baseReadinessMissingHtml.includes('Target unavailable')
+  || baseReadinessMissingHtml.includes('0.0%')) {
+  throw new Error('Commander readiness displays should preserve backend metrics, target, real zero, and unavailable values');
+}
+console.log('  PASS  Commander fleet and base readiness metrics (populated, zero, and unavailable cases)');
 
 const CASES = [
   ['commander/dashboard', Commander, props],

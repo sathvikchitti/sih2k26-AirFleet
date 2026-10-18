@@ -11,16 +11,181 @@ availability automatically — there is no separate number to keep in sync.
 
 from __future__ import annotations
 
+import math
+import os
+
 from ..data import BASES
 from ..domain import knowledge
-from ..domain.enums import AircraftStatus, WorkOrderStatus
-from ..repositories import AircraftRepository, WorkOrderRepository
+from ..domain.enums import AircraftStatus, PRIORITY_ORDER, TransferStatus, WorkOrderStatus
+from ..repositories import AircraftRepository, WorkOrderRepository, snapshot, store
+from ..repositories.inventory_repository import DEFAULT_MIN_CONDITION_PCT
 from ..repositories.maintenance_repository import OPEN_WORK_ORDER_STATUSES
 from .ml import get_provider, predict_validated
 
 
 def _pct(numerator: int, denominator: int) -> float:
     return round(numerator / denominator * 100, 1) if denominator else 0.0
+
+
+def parse_readiness_target(value: str | None) -> float:
+    """Parse the configured mission-capable target or fail closed."""
+    if value is None:
+        return 75.0
+    try:
+        target = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise RuntimeError("READINESS_TARGET_PCT must be a finite number from 0 to 100") from exc
+    if not math.isfinite(target) or not 0 <= target <= 100:
+        raise RuntimeError("READINESS_TARGET_PCT must be a finite number from 0 to 100")
+    return target
+
+
+READINESS_TARGET_PCT = parse_readiness_target(os.getenv("READINESS_TARGET_PCT"))
+
+
+def _readiness_kpis_from_snapshot(state: dict, target_pct: float) -> dict[str, dict]:
+    """Calculate fleet/base KPI counts from one immutable repository snapshot.
+
+    NMCS is a demo resource-shortage proxy: a non-AVAILABLE airframe counts
+    once if an open, catalogued component work order cannot claim serviceable
+    local stock. In-transit/pending shipments are not on-hand stock; receipt
+    affects the result only after inventory is actually credited. Known
+    reservations are already excluded from the free-quantity calculation.
+    """
+    aircraft = list(state.get("aircraft", []))
+    by_aircraft = {str(row.get("id", "")).upper(): row for row in aircraft}
+    inventory = [dict(row) for row in state.get("inventory", [])]
+    inventory_by_key = {
+        (str(row.get("base_id", "")).lower(), str(row.get("part_number", "")).upper()): row
+        for row in inventory
+    }
+    parts = {
+        str(row.get("part_number", "")).upper(): row
+        for row in state.get("parts", [])
+    }
+    totals: dict[str, dict[str, set[str] | int]] = {
+        base["id"]: {"available": set(), "maintenance_down": set(), "nmcs": set()}
+        for base in BASES
+    }
+    fleet: dict[str, set[str] | int] = {
+        "available": set(), "maintenance_down": set(), "nmcs": set(),
+    }
+    reserved_claims: dict[tuple[str, str], int] = {}
+
+    # A pending outgoing shipment has not changed physical on-hand quantity,
+    # but the allocator treats it as a provisional claim. Keep it unavailable
+    # to other work orders in this deterministic snapshot projection.
+    for transfer in sorted(
+        state.get("transfers", []),
+        key=lambda row: (str(row.get("created") or row.get("created_at") or ""),
+                         str(row.get("id") or "")),
+    ):
+        if transfer.get("status") != TransferStatus.PENDING_APPROVAL.value:
+            continue
+        key = (str(transfer.get("source_base", "")).lower(),
+               str(transfer.get("part_number", "")).upper())
+        line = inventory_by_key.get(key)
+        if line is not None:
+            line["quantity"] = int(line.get("quantity", 0)) - int(transfer.get("quantity", 1))
+
+    for aircraft_row in aircraft:
+        aircraft_id = str(aircraft_row.get("id", "")).upper()
+        base_id = str(aircraft_row.get("base_id", "")).lower()
+        status = aircraft_row.get("status")
+        if status == AircraftStatus.AVAILABLE.value:
+            fleet["available"].add(aircraft_id)
+            if base_id in totals:
+                totals[base_id]["available"].add(aircraft_id)
+        if status in (AircraftStatus.MAINTENANCE.value, AircraftStatus.WAITING_FOR_PART.value):
+            fleet["maintenance_down"].add(aircraft_id)
+            if base_id in totals:
+                totals[base_id]["maintenance_down"].add(aircraft_id)
+
+    def order(row: dict) -> tuple:
+        priority = PRIORITY_ORDER.get(row.get("priority"), 0)
+        return (-int(priority), str(row.get("created_at") or ""), str(row.get("id") or ""))
+
+    open_orders = sorted(
+        (row for row in state.get("work_orders", [])
+         if row.get("status") in OPEN_WORK_ORDER_STATUSES),
+        key=order,
+    )
+    for work_order in open_orders:
+        aircraft_id = str(work_order.get("aircraft_id", "")).upper()
+        aircraft_row = by_aircraft.get(aircraft_id)
+        component = str(work_order.get("required_component") or "").upper()
+        part = parts.get(component)
+        if (aircraft_row is None or not component or part is None):
+            continue
+
+        base_id = str(work_order.get("base_id") or aircraft_row.get("base_id") or "").lower()
+        line = inventory_by_key.get((base_id, component))
+        minimum_condition = int(part.get("min_condition_pct", DEFAULT_MIN_CONDITION_PCT))
+
+        # A reserved unit is already committed to this work order. It is not
+        # a shortage when the current pooled line still meets the catalog
+        # threshold and the aggregate inventory row reflects the reservation.
+        # Per-unit condition is not represented in this POC.
+        if work_order.get("resource_reserved"):
+            key = (base_id, component)
+            used_reserved = reserved_claims.get(key, 0)
+            try:
+                reserved_unit_serviceable = (
+                    line is not None
+                    and int(line.get("quantity", 0)) > used_reserved
+                    and int(line.get("reserved", 0)) > used_reserved
+                    and int(line.get("condition_pct")) >= minimum_condition
+                )
+            except (TypeError, ValueError, OverflowError):
+                reserved_unit_serviceable = False
+            if reserved_unit_serviceable:
+                reserved_claims[key] = used_reserved + 1
+                continue
+            has_local_unit = False
+        elif line is None:
+            has_local_unit = False
+        else:
+            available = (
+                int(line.get("quantity", 0))
+                - int(line.get("reserved", 0))
+                - int(line.get("minimum_reserve", 0))
+            )
+            try:
+                condition = int(line.get("condition_pct", 0))
+            except (TypeError, ValueError, OverflowError):
+                condition = -1
+            has_local_unit = available > 0 and condition >= minimum_condition
+
+        if has_local_unit:
+            # Claim from a cloned ledger in deterministic priority order so
+            # two work orders cannot both count the same physical unit.
+            line["quantity"] = int(line.get("quantity", 0)) - 1
+            continue
+
+        if aircraft_row.get("status") == AircraftStatus.AVAILABLE.value:
+            continue
+        fleet["nmcs"].add(aircraft_id)
+        if str(aircraft_row.get("base_id", "")).lower() in totals:
+            totals[str(aircraft_row["base_id"]).lower()]["nmcs"].add(aircraft_id)
+
+    def fields(counts: dict[str, set[str] | int], denominator: int) -> dict:
+        rate = _pct(len(counts["available"]), denominator)
+        return {
+            "mission_capable_rate_pct": rate,
+            "readiness_target_pct": target_pct,
+            "gap_to_target_pct": round(max(0.0, target_pct - rate), 1),
+            "nmcs_count": len(counts["nmcs"]),
+            "aircraft_down_for_maintenance": len(counts["maintenance_down"]),
+        }
+
+    result = {"fleet": fields(fleet, len(aircraft))}
+    result["bases"] = {
+        base_id: fields(counts, sum(
+            str(row.get("base_id", "")).lower() == base_id for row in aircraft
+        ))
+        for base_id, counts in totals.items()
+    }
+    return result
 
 
 def classify_aircraft(aircraft_id: str, ml_risk: str | None = None) -> str:
@@ -111,10 +276,15 @@ def sync_aircraft_states() -> list[dict]:
 
 
 def fleet_overview() -> dict:
-    """Fleet-wide availability plus the same figures per base."""
+    """Fleet-wide availability and readiness KPIs from one state snapshot."""
     provider = get_provider()
-    aircraft = AircraftRepository.list_all()
+    # `snapshot()` is intentionally non-initializing; preserve repository
+    # bootstrap behavior for direct service callers before FastAPI startup.
+    store()
+    state = snapshot()
+    aircraft = state.get("aircraft", [])
     total = len(aircraft)
+    kpis = _readiness_kpis_from_snapshot(state, READINESS_TARGET_PCT)
 
     available = sum(1 for a in aircraft if a.get("status") == AircraftStatus.AVAILABLE.value)
     maintenance = sum(1 for a in aircraft if a.get("status") == AircraftStatus.MAINTENANCE.value)
@@ -146,6 +316,7 @@ def fleet_overview() -> dict:
             "at_risk": sum(1 for a in held if a.get("status") in (AircraftStatus.AT_RISK.value, AircraftStatus.DEGRADED.value)),
             "maintenance": sum(1 for a in held if a.get("status") == AircraftStatus.MAINTENANCE.value),
             "waiting_for_part": sum(1 for a in held if a.get("status") == AircraftStatus.WAITING_FOR_PART.value),
+            **kpis["bases"][b["id"]],
         })
 
     return {
@@ -157,6 +328,7 @@ def fleet_overview() -> dict:
         "unavailable": unavailable,
         "high_risk": high_risk,
         "availability_pct": _pct(available, total),
+        **kpis["fleet"],
         "bases": bases,
         # Provenance, so the UI can be honest about what the number means.
         "calculation": "available_aircraft / total_aircraft",
