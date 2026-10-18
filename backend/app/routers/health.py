@@ -12,8 +12,15 @@ from fastapi import APIRouter, HTTPException
 from ..repositories import AircraftRepository, PredictionHistoryRepository
 from ..services import compatibility
 from ..services.ml import get_provider
+from ..services.ml.base import risk_band_policy_payload
 
 router = APIRouter(tags=["health"])
+
+
+@router.get("/api/policy/risk-bands")
+def risk_bands():
+    """Read the server's effective demo risk thresholds and their semantics."""
+    return risk_band_policy_payload()
 
 
 @router.get("/api/health/{aircraft_id}")

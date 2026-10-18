@@ -3,6 +3,7 @@ import { api, baseName, distanceText, etaText, failureProbabilityText, healthSco
 import { Badge, HealthBar, HealthChart, SectionTitle, riskColor, statusColor } from '../components/ui.jsx';
 import MaintenanceCasePanel from '../components/MaintenanceCasePanel.jsx';
 import { RulEnvelope, RulHistoryChart, TopSensorDrivers } from '../components/PredictionEvidence.jsx';
+import RiskPolicyNote from '../components/RiskPolicyNote.jsx';
 
 // Closed loop: WAITING → IN TRANSIT → RECEIVED → READY → IN_PROGRESS → AVAILABLE
 export default function AircraftDetail({ id, role, homeBase, onBack, refresh, refreshKey }) {
@@ -97,6 +98,7 @@ export default function AircraftDetail({ id, role, homeBase, onBack, refresh, re
             <div>Subsystem<br /><b>{h.subsystem || 'Unavailable'}</b></div>
           </div>
           {h.probability_status === 'unavailable' && <div style={{ marginTop: 6, fontSize: 11, color: '#8b94a3' }}>Risk band follows the backend health-only policy; it is not a calibrated failure probability.</div>}
+          <RiskPolicyNote refreshKey={refreshKey} />
           {(h.model_version || h.prediction_timestamp || metadata.prediction_timestamp || h.prediction_horizon_hours != null || h.is_synthetic || h.history_source || h.source || h.provider || fallbackPrediction) && (
             <div style={{ marginTop: 10, fontSize: 11, color: '#8b94a3' }}>
               {fallbackPrediction ? 'OFFLINE DEMO FALLBACK · illustrative prediction, not live' : h.model_version ? <>Model {h.model_version}</> : 'Prediction provenance unavailable'}

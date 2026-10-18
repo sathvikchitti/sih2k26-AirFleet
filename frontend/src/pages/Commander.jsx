@@ -4,6 +4,7 @@ import { Badge, DataError, KpiCard, SectionTitle, riskColor } from '../component
 import ReadinessSimulationPanel from '../components/ReadinessSimulationPanel.jsx';
 import ResourceForecastPanel from '../components/ResourceForecastPanel.jsx';
 import EvaluationSummaryPanel from '../components/EvaluationSummaryPanel.jsx';
+import RiskPolicyNote from '../components/RiskPolicyNote.jsx';
 
 const finiteMetric = value => typeof value === 'number' && Number.isFinite(value);
 const percentLabel = value => finiteMetric(value) ? `${value.toFixed(1)}%` : '—';
@@ -227,6 +228,7 @@ export default function CommanderDashboard({ onOpenAircraft, refreshKey }) {
       </div>
 
       <SectionTitle>Fleet risk — high-risk aircraft</SectionTitle>
+      <RiskPolicyNote refreshKey={refreshKey} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 12 }}>
         {atRisk.slice(0, 4).map(a => (
           <button key={a.id} onClick={() => onOpenAircraft(a.id)} style={{ textAlign: 'left', cursor: 'pointer', background: '#151b24', border: '1px solid #2a3444', borderRadius: 10, padding: 14, color: '#e6e9ee' }}>

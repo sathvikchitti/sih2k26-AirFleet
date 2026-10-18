@@ -86,7 +86,6 @@ test('FD001 nullable prediction contract stays distinct from offline demo fallba
     globalThis.fetch = originalFetch;
   }
 });
-
 test('cycle resource forecast preserves fractional demand and propagates provider errors', async () => {
   const originalFetch = globalThis.fetch;
   let requestedUrl = '';
@@ -145,6 +144,38 @@ test('synthetic evaluation summary is fetched strictly and propagates backend er
       json: async () => ({ detail: 'Evaluation unavailable' }),
     });
     await assert.rejects(api.getEvaluationSummary(), error => error.status === 503);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('risk-band policy uses the backend contract and propagates unavailable status', async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedUrl = '';
+  const policy = {
+    policy_id: 'demo-risk-bands-v1',
+    configuration_source: 'built_in_default',
+    configurable: true,
+    health_score: { thresholds: [{ risk_level: 'CRITICAL', operator: '<', value: 45 }] },
+    fd001: { health_score_formula: 'round(100 * min(RUL, 125) / 125)', rul_cap_cycles: 125, probability_status: 'unavailable', probability_calibrated: false },
+  };
+  try {
+    globalThis.fetch = async url => {
+      requestedUrl = String(url);
+      return { ok: true, status: 200, json: async () => policy };
+    };
+    const actual = await api.getRiskBands();
+    assert.equal(requestedUrl, '/api/policy/risk-bands');
+    assert.equal(actual.health_score.thresholds[0].value, 45);
+    assert.equal(actual.fd001.rul_cap_cycles, 125);
+    assert.equal(actual.fd001.probability_calibrated, false);
+
+    globalThis.fetch = async () => ({
+      ok: false,
+      status: 503,
+      json: async () => ({ detail: 'Risk policy unavailable' }),
+    });
+    await assert.rejects(api.getRiskBands(), error => error.status === 503);
   } finally {
     globalThis.fetch = originalFetch;
   }

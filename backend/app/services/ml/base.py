@@ -29,14 +29,110 @@ Contract shape returned by `predict()`:
 
 from __future__ import annotations
 
+import json
 import math
+import os
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Protocol, runtime_checkable
 
 from ...domain.enums import RiskLevel
 
 _PROVIDER_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="ml-provider")
+
+RISK_HEALTH_THRESHOLDS_ENV = "DEMO_RISK_HEALTH_THRESHOLDS"
+DEFAULT_RISK_HEALTH_THRESHOLDS = (45.0, 60.0, 80.0)
+RISK_PROBABILITY_THRESHOLDS = (0.70, 0.45, 0.25)
+
+
+@dataclass(frozen=True)
+class RiskBandPolicy:
+    """Immutable server-loaded risk bands shared by inference and policy API."""
+
+    health_thresholds: tuple[float, float, float]
+    configuration_source: str
+
+
+def load_risk_band_policy(raw_value: str | None = None) -> RiskBandPolicy:
+    """Parse health cutoffs from a JSON array, or use the established defaults.
+
+    The accepted values are the exclusive upper bounds for CRITICAL, HIGH,
+    and MEDIUM health bands. They must be finite, within 0..100, and strictly
+    increasing. This is configuration at process startup, not runtime state.
+    """
+    raw = os.getenv(RISK_HEALTH_THRESHOLDS_ENV) if raw_value is None else raw_value
+    if raw is None or not raw.strip():
+        return RiskBandPolicy(DEFAULT_RISK_HEALTH_THRESHOLDS, "built_in_default")
+    try:
+        values = json.loads(raw)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"{RISK_HEALTH_THRESHOLDS_ENV} must be a JSON array") from exc
+    if not isinstance(values, list) or len(values) != 3:
+        raise ValueError(f"{RISK_HEALTH_THRESHOLDS_ENV} must contain exactly three numbers")
+    normalized: list[float] = []
+    for value in values:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"{RISK_HEALTH_THRESHOLDS_ENV} values must be finite numbers from 0 to 100")
+        number = float(value)
+        if not math.isfinite(number) or not 0.0 <= number <= 100.0:
+            raise ValueError(f"{RISK_HEALTH_THRESHOLDS_ENV} values must be finite numbers from 0 to 100")
+        normalized.append(number)
+    if not normalized[0] < normalized[1] < normalized[2]:
+        raise ValueError(f"{RISK_HEALTH_THRESHOLDS_ENV} values must be strictly increasing")
+    return RiskBandPolicy(tuple(normalized), RISK_HEALTH_THRESHOLDS_ENV)
+
+
+# Read once during module import, which is part of backend startup. Changing
+# the environment requires a process restart to affect risk classification.
+RISK_BAND_POLICY = load_risk_band_policy()
+
+
+def risk_band_policy_payload() -> dict:
+    """Expose the same immutable thresholds used by `risk_band()`."""
+    from .fd001_provider import HEALTH_DERIVATION, HEALTH_RUL_CAP_CYCLES
+
+    critical, high, medium = RISK_BAND_POLICY.health_thresholds
+    p_critical, p_high, p_medium = RISK_PROBABILITY_THRESHOLDS
+    return {
+        "policy_id": "demo-risk-bands-v1",
+        "source": "backend.services.ml.base.risk_band",
+        "configuration_source": RISK_BAND_POLICY.configuration_source,
+        "configurable": True,
+        "health_score": {
+            "unit": "score_0_to_100",
+            "configurable": True,
+            "thresholds": [
+                {"risk_level": "CRITICAL", "operator": "<", "value": critical},
+                {"risk_level": "HIGH", "operator": "<", "value": high},
+                {"risk_level": "MEDIUM", "operator": "<", "value": medium},
+                {"risk_level": "LOW", "operator": ">=", "value": medium},
+            ],
+        },
+        "failure_probability": {
+            "unit": "probability_0_to_1",
+            "configurable": False,
+            "thresholds": [
+                {"risk_level": "CRITICAL", "operator": ">=", "value": p_critical},
+                {"risk_level": "HIGH", "operator": ">=", "value": p_high},
+                {"risk_level": "MEDIUM", "operator": ">=", "value": p_medium},
+                {"risk_level": "LOW", "operator": "<", "value": p_medium},
+            ],
+        },
+        "combination": {
+            "rule": "most_severe",
+            "severity_order": ["CRITICAL", "HIGH", "MEDIUM", "LOW"],
+        },
+        "fd001": {
+            "rul_unit": "cycles",
+            "health_score_formula": HEALTH_DERIVATION,
+            "rul_cap_cycles": HEALTH_RUL_CAP_CYCLES,
+            "failure_probability": None,
+            "probability_status": "unavailable",
+            "probability_calibrated": False,
+            "subsystem_inferred": False,
+        },
+    }
 
 
 @runtime_checkable
@@ -69,21 +165,24 @@ class MLProvider(Protocol):
 def risk_band(health_score: float, failure_probability: float | None = None) -> str:
     """Return the more severe band from health and probability signals.
 
-    Health boundaries are <45 CRITICAL, <60 HIGH, <80 MEDIUM, else LOW.
+    Health boundaries are configurable exclusive cutoffs for CRITICAL, HIGH,
+    and MEDIUM, else LOW. Defaults remain <45 CRITICAL, <60 HIGH, <80 MEDIUM.
     Failure probability boundaries are >=.70 CRITICAL, >=.45 HIGH,
     >=.25 MEDIUM, else LOW. Signals are combined by taking the most severe
     band, so contradictory inputs cannot lower operational concern.
     """
     fs = _bounded_number(health_score, "health_score", 0.0, 100.0)
     bands = [RiskLevel.CRITICAL, RiskLevel.HIGH, RiskLevel.MEDIUM, RiskLevel.LOW]
-    health_band = (RiskLevel.CRITICAL if fs < 45 else RiskLevel.HIGH if fs < 60
-                   else RiskLevel.MEDIUM if fs < 80 else RiskLevel.LOW)
+    critical, high, medium = RISK_BAND_POLICY.health_thresholds
+    health_band = (RiskLevel.CRITICAL if fs < critical else RiskLevel.HIGH if fs < high
+                   else RiskLevel.MEDIUM if fs < medium else RiskLevel.LOW)
     chosen = health_band
     if failure_probability is not None:
         probability = _bounded_number(failure_probability, "failure_probability", 0.0, 1.0)
-        probability_band = (RiskLevel.CRITICAL if probability >= .70 else RiskLevel.HIGH
-                            if probability >= .45 else RiskLevel.MEDIUM
-                            if probability >= .25 else RiskLevel.LOW)
+        p_critical, p_high, p_medium = RISK_PROBABILITY_THRESHOLDS
+        probability_band = (RiskLevel.CRITICAL if probability >= p_critical else RiskLevel.HIGH
+                            if probability >= p_high else RiskLevel.MEDIUM
+                            if probability >= p_medium else RiskLevel.LOW)
         chosen = min((health_band, probability_band), key=lambda band: bands.index(band))
     return chosen.value
 

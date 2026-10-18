@@ -234,6 +234,7 @@ export const api = {
   // Offline synthetic scenario results are a strict backend contract. Never
   // replace evaluation output with fallback operational/demo data.
   getEvaluationSummary: async () => fetchJSON('/api/evaluation/summary'),
+  getRiskBands: async () => fetchJSON('/api/policy/risk-bands'),
   getWorkOrderRecommendation: async (woId) => {
     return fetchJSON('/api/work-orders/' + woId + '/recommendation');
   },

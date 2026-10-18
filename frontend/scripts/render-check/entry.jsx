@@ -34,6 +34,7 @@ import { EvaluationHeadline, EvaluationIntervalChart, EvaluationResults, pairedS
 import BaseManager from '../../src/pages/BaseManager.jsx';
 import Logistics from '../../src/pages/Logistics.jsx';
 import { compareTimeWeightedAvailability } from '../../src/components/ReadinessSimulationPanel.jsx';
+import { RiskPolicyDetails } from '../../src/components/RiskPolicyNote.jsx';
 
 const noop = () => {};
 const props = { onOpenAircraft: noop, refresh: noop, refreshKey: 0 };
@@ -126,6 +127,34 @@ if ((driverHtml.match(/<b>/g) || []).length !== 5
   throw new Error('Top sensor drivers should be bounded, signed, reference-labelled, and unavailable when absent');
 }
 console.log('  PASS  FD001 RUL envelope and sensor driver evidence rendering (populated, null, and zero cases)');
+
+const riskPolicyHtml = renderToString(React.createElement(RiskPolicyDetails, { policy: {
+  policy_id: 'demo-risk-bands-v1',
+  source: 'backend.risk_band',
+  configuration_source: 'DEMO_RISK_HEALTH_THRESHOLDS',
+  configurable: true,
+  health_score: { unit: 'score_0_to_100', thresholds: [
+    { risk_level: 'CRITICAL', operator: '<', value: 45 },
+    { risk_level: 'HIGH', operator: '<', value: 60 },
+    { risk_level: 'MEDIUM', operator: '<', value: 80 },
+    { risk_level: 'LOW', operator: '>=', value: 80 },
+  ] },
+  combination: { rule: 'most_severe' },
+  fd001: { rul_unit: 'cycles', health_score_formula: 'round(100 * min(RUL, 125) / 125)', rul_cap_cycles: 125, probability_status: 'unavailable', probability_calibrated: false },
+} }));
+const missingRiskPolicyHtml = renderToString(React.createElement(RiskPolicyDetails, { policy: null }));
+const riskPolicyText = riskPolicyHtml.replace(/<!--.*?-->/g, '');
+if (!riskPolicyText.includes('round(100 * min(RUL, 125) / 125)')
+  || !riskPolicyText.includes('RUL cap 125 cycles')
+  || !riskPolicyText.includes('CRITICAL &lt; 45')
+  || !riskPolicyText.includes('LOW &gt;= 80')
+  || !riskPolicyText.includes('DEMO_RISK_HEALTH_THRESHOLDS')
+  || !riskPolicyText.includes('not a calibrated failure probability')
+  || !missingRiskPolicyHtml.includes('Health-score threshold values unavailable')
+  || missingRiskPolicyHtml.includes('CRITICAL') || missingRiskPolicyHtml.includes('45')) {
+  throw new Error('Risk policy note should render backend formula/thresholds and withhold fallback values when metadata is absent');
+}
+console.log('  PASS  backend-sourced risk policy rendering and unavailable metadata');
 
 const readinessHtml = renderToString(React.createElement(MissionReadinessBand, {
   fleet: {

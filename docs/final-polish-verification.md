@@ -137,14 +137,41 @@ node --test scripts/prediction-contract.test.mjs
 3/3 passed
 ```
 
-## Initial read-only investigation for Tasks 3–7
+## Task 5 — risk policy inspection and disclosure
+
+The backend exposes its effective health-risk bands through `GET /api/policy/risk-bands`. The default health cutoffs remain 45/60/80, while `DEMO_RISK_HEALTH_THRESHOLDS` can set exactly three finite, in-range, strictly ascending cutoffs at server startup. Failure-probability bands remain fixed at 0.70/0.45/0.25, and conflicting health/probability signals still select the more severe band. The new UI note on Commander and aircraft detail reads the endpoint rather than carrying a second threshold table. For FD001, the policy metadata exposes the existing health-from-RUL formula and 125-cycle cap; probability remains null/unavailable and no subsystem is inferred.
+
+The initial risk-policy probe found those thresholds hard-coded. Task 5 makes only the health-score cutoffs configurable and reports the effective policy; it does not alter the band ordering, the probability thresholds, or the existing default health calculation.
+
+Focused verification outputs:
+
+```text
+Backend (from backend/):
+python -m pytest tests/test_risk_policy.py tests/test_regressions.py tests/test_fd001_provider.py -q --basetemp .pytest-tmp-task5-focused-elevated
+63 passed in 2.45s
+py_compile passed
+
+Backend full (from backend/):
+python -m pytest tests -q --ignore=tests/test_api_compat.py --basetemp .pytest-tmp-task5-full
+271 passed in 109.09s
+
+Frontend (from frontend/):
+npm run verify:views
+19/19 views passed
+
+npm run build
+passed (57 modules)
+
+node --test scripts/prediction-contract.test.mjs
+4/4 passed
+```
+
+
+## Initial read-only investigation for Tasks 6–7
 
 The initial inspection was read-only. The production FD001 model SHA-256 is `14114389BC8DC09449CDE646F9B582933B58FFA188F3955508CC2F3E87D30BE9`.
 
 - Task 2 initial finding: before the change, `backend/app/domain/knowledge.py` mapped engines 1–10 to `HP-204`. Task 2 changes the default to odd engines `HP-204`, even engines `OE-310`. The only other catalog part categorized as Engine is `OE-310` (`backend/app/data.py:87–90`). The validated `FD001_ENGINE_PART_MAPPING` override remains (`knowledge.py`); both defaults and overrides are demo assumptions, not aircraft/engine identity facts.
 - Task 3 initial finding: the pre-change read-only port-8011 probe returned no suggested moves at 30, 60, or 100 cycles. At 100 cycles, Alpha HP-204 expected demand was `0.4707`, stock/free `0`, shortfall `1`; Bravo demand `1.5970`, quantity `1`, minimum reserve `1`, transferable `0`, shortfall `2`; Charlie demand `1.4431`, quantity/free `1`, forecast-protected `1`, shortfall `1`. That was the all-HP-204 mapping and pre-change running process. After Task 2, the isolated 60-cycle probe described above found a feasible Charlie-to-Bravo HP-204 suggestion. These are different mapping snapshots; no fixture or inventory was altered.
-- Task 5: risk thresholds are currently hard-coded in `backend/app/services/ml/base.py:69–88` (health-score bands `<45`, `<60`, `<80`; probability bands `>=0.70`, `>=0.45`, `>=0.25`). No risk-band policy GET endpoint was found. The README describes the values as demo policy thresholds, but current implementation does not expose them as configurable settings.
 - Task 6: `GET /api/evaluation/summary` (`backend/app/routers/evaluation.py:12–33`) serves an aggregate synthetic scale-evaluation JSON, not the model metrics report. Official-test coverage values are in `backend/models/cmapss_fd001_rf_v1_metrics.json`; a UI coverage label would need an additive read-only projection or other agreed source. The README already labels the RF tree envelope uncalibrated.
 - Task 7: the model artifact is 19,662,518 bytes. The requested runtime data set (`train_FD001.txt`, `test_FD001.txt`, `RUL_FD001.txt`) plus `readme.txt` totals 5,747,082 bytes; together they total 25,409,600 bytes (25.41 decimal MB, 24.23 MiB). `.gitignore` excludes the model `*.joblib` and the whole `CMAPSSData/` directory; the model-metrics JSON is not ignored. The current machine has Python 3.14.0 with NumPy 2.4.4, scikit-learn 1.9.0, and joblib 1.5.3 installed; FastAPI 0.136.1, uvicorn 0.46.0, and Pydantic 2.13.3 differ from the repo's pinned versions. The metrics record NumPy 2.4.4 and scikit-learn 1.9.0. `py -0p` reports no registered Python installations; a Python 3.13 WindowsApps alias exists but failed in this shell. `pip cache list numpy` reports no locally built wheels, `frontend/node_modules` exists, and npm's protected cache setting could not be queried. The Docker CLI is present, but `docker info` cannot connect to the Docker Desktop Linux engine pipe, so container build/run was unavailable. No fresh clone, archive, dependency installation, cleanup, or container operation was attempted during this read-only pass.
-
-\n
