@@ -136,6 +136,8 @@ The reusable prediction interface is `FD001RULModel.load(path).predict_history(h
 
 Latest reproducible run with seed 42: grouped validation RF MAE/RMSE 11.2843/14.5745 cycles (median baseline 62.7000/63.2519); official final-test RF MAE/RMSE 13.7862/18.6998 cycles (median baseline 39.0800/49.8199). These are results on simulated FD001 engines, not evidence of real-aircraft performance. The weaker official-test result relative to the grouped validation split is retained as measured; no tuning claim is made. The generated `.joblib` model and metrics JSON are ignored artifacts and should be recreated with the training command when absent.
 
+`GET /api/ml/fd001/metrics` returns a validated read-only projection of the saved official-test metrics reference for the existing RF artifact. It reports the scoring protocol, artifact version/hash, and results for 100 test engines. The raw per-engine p10–p90 RF tree interval has nominal coverage 80%; observed coverage was 70%. The separate mean-inclusive envelope (the raw bounds expanded when necessary to include the forest mean) also had observed coverage 70%; no nominal coverage is assigned to this expanded envelope. Both are uncalibrated. The route reads the saved metrics JSON and does not retrain or rescore. Missing, corrupt, or invalid metrics produce HTTP 503 with `metrics_status: "unavailable"`. This endpoint is distinct from `GET /api/evaluation/summary`, which serves aggregate synthetic fleet-policy results.
+
 To run the app using the local model instead of mock, put the dataset and trained artifact in the documented paths and set the provider explicitly:
 
 ```powershell

@@ -34,6 +34,11 @@ class FD001MLProvider:
         # Derived once at provider construction, never fitted per prediction.
         self._healthy_reference = healthy_reference
 
+    @property
+    def rul_trend_model_version(self) -> str:
+        """Version of the model that generated the provider's RUL prefix series."""
+        return self._model.model_version
+
     @classmethod
     def from_environment(cls) -> "FD001MLProvider":
         backend_root = Path(__file__).resolve().parents[3]

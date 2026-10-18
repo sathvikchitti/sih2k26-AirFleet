@@ -180,3 +180,46 @@ test('risk-band policy uses the backend contract and propagates unavailable stat
     globalThis.fetch = originalFetch;
   }
 });
+
+test('saved FD001 artifact metrics use the read-only selected-model contract and propagate unavailable status', async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedUrl = '';
+  const report = {
+    status: 'available',
+    source: 'existing_artifact_reference',
+    evaluation_type: 'offline_simulation',
+    dataset: 'NASA C-MAPSS FD001',
+    unit: 'cycles',
+    model: { version: 'cmapss-fd001-rf-v1', artifact_sha256: 'a'.repeat(64) },
+    official_test: {
+      engine_count: 100,
+      protocol: 'one prediction per test engine at final observed cycle',
+      metrics: { mae_cycles: 12.3, rmse_cycles: 18.4, nasa_asymmetric_score: 350.2 },
+      uncertainty: {
+        raw_tree_p10_p90: { observed_coverage: 0.7, nominal_coverage: 0.8, calibrated: false },
+        mean_inclusive_envelope: { observed_coverage: 0.7, nominal_coverage: null, calibrated: false },
+      },
+    },
+    scope: { dataset_source_note: 'Official test labels used for scoring only.' },
+  };
+  try {
+    globalThis.fetch = async url => {
+      requestedUrl = String(url);
+      return { ok: true, status: 200, json: async () => report };
+    };
+    const actual = await api.getFd001Metrics();
+    assert.equal(requestedUrl, '/api/ml/fd001/metrics');
+    assert.equal(actual.model.version, 'cmapss-fd001-rf-v1');
+    assert.equal(actual.official_test.uncertainty.raw_tree_p10_p90.observed_coverage, 0.7);
+    assert.equal(actual.official_test.uncertainty.mean_inclusive_envelope.nominal_coverage, null);
+
+    globalThis.fetch = async () => ({
+      ok: false,
+      status: 503,
+      json: async () => ({ detail: 'FD001 metrics unavailable', metrics_status: 'unavailable' }),
+    });
+    await assert.rejects(api.getFd001Metrics(), error => error.status === 503);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

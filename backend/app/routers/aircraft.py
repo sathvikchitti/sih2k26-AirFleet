@@ -42,6 +42,7 @@ def trend(aircraft_id: str):
         "aircraft_id": key,
         "trend": provider.degradation_trend(key),
         "trend_source": getattr(provider, "trend_source", "illustrative_provider_curve"),
+        "rul_trend_model_version": getattr(provider, "rul_trend_model_version", None),
     }
 
 

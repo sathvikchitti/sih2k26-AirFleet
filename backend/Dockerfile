@@ -16,6 +16,7 @@ RUN python -m pip install --no-cache-dir -r requirements.txt
 
 COPY backend/app ./app
 COPY backend/models/cmapss_fd001_rf_v1.joblib ./models/cmapss_fd001_rf_v1.joblib
+COPY backend/models/cmapss_fd001_rf_v1_metrics.json ./models/cmapss_fd001_rf_v1_metrics.json
 COPY CMAPSSData /CMAPSSData
 
 RUN python -c "from pathlib import Path; assert Path('/app/models/cmapss_fd001_rf_v1.joblib').is_file(); assert Path('/CMAPSSData/test_FD001.txt').is_file()"

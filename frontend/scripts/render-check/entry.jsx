@@ -22,7 +22,7 @@ import BaseMaintenanceView from '../../src/pages/views/BaseMaintenanceView.jsx';
 import BaseResourcesView from '../../src/pages/views/BaseResourcesView.jsx';
 import InventoryView from '../../src/pages/views/InventoryView.jsx';
 import { ArrivalConstraintNotice } from '../../src/pages/views/InventoryView.jsx';
-import { RulEnvelope, RulHistoryChart, TopSensorDrivers } from '../../src/components/PredictionEvidence.jsx';
+import { Fd001ArtifactEvidence, RulEnvelope, RulHistoryChart, TopSensorDrivers } from '../../src/components/PredictionEvidence.jsx';
 import ComponentsView from '../../src/pages/views/ComponentsView.jsx';
 import TransfersView from '../../src/pages/views/TransfersView.jsx';
 import MaintenanceResourcesView from '../../src/pages/views/MaintenanceResourcesView.jsx';
@@ -81,11 +81,60 @@ const rulChartHtml = renderToString(React.createElement(RulHistoryChart, {
   ],
 }));
 if (!rulChartHtml.includes('RUL history (cycles)')
-  || !rulChartHtml.includes('tree-spread envelope, uncalibrated')
+  || !rulChartHtml.includes('uncalibrated model spread')
   || !rulChartHtml.includes('fill="#4f9cf0"')
   || !rulChartHtml.includes('not a confidence interval')) {
   throw new Error('RUL history chart should show its uncalibrated mean-inclusive tree-spread envelope');
 }
+const fd001ArtifactMetrics = {
+  status: 'available', dataset: 'NASA C-MAPSS FD001', unit: 'cycles',
+  model: { version: 'cmapss-fd001-rf-v1', artifact_sha256: 'a'.repeat(64) },
+  official_test: {
+    engine_count: 100,
+    protocol: 'one prediction per test engine at final observed cycle',
+    metrics: { mae_cycles: 12.3, rmse_cycles: 18.4, nasa_asymmetric_score: 350.2 },
+    uncertainty: {
+      raw_tree_p10_p90: { observed_coverage: 0.7, nominal_coverage: 0.8, mean_width_cycles: 38.19, calibrated: false },
+      mean_inclusive_envelope: { observed_coverage: 0.7, reference_quantile_range: [10, 90], nominal_coverage: null, mean_width_cycles: 38.2, calibrated: false },
+    },
+  },
+  scope: { dataset_source_note: 'Official test labels used for scoring only.' },
+};
+const matchingArtifactHtml = renderToString(React.createElement(Fd001ArtifactEvidence, {
+  metrics: fd001ArtifactMetrics,
+  selectedModelVersion: 'cmapss-fd001-rf-v1',
+  trendModelVersion: 'cmapss-fd001-rf-v1',
+}));
+const mismatchedArtifactHtml = renderToString(React.createElement(Fd001ArtifactEvidence, {
+  metrics: fd001ArtifactMetrics,
+  selectedModelVersion: 'cmapss-fd001-rf-v2',
+  trendModelVersion: 'cmapss-fd001-rf-v1',
+}));
+const missingTrendVersionHtml = renderToString(React.createElement(Fd001ArtifactEvidence, {
+  metrics: fd001ArtifactMetrics,
+  selectedModelVersion: 'cmapss-fd001-rf-v1',
+  trendModelVersion: null,
+}));
+const unavailableArtifactHtml = renderToString(React.createElement(Fd001ArtifactEvidence, {
+  metrics: null, selectedModelVersion: 'cmapss-fd001-rf-v1', trendModelVersion: null, error: true,
+}));
+const normalizedText = html => html.replace(/<!--.*?-->/g, '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+const matchingArtifactText = normalizedText(matchingArtifactHtml);
+const mismatchedArtifactText = normalizedText(mismatchedArtifactHtml);
+const missingTrendVersionText = normalizedText(missingTrendVersionHtml);
+const unavailableArtifactText = normalizedText(unavailableArtifactHtml);
+if (!matchingArtifactText.includes('70.0% observed / 80.0% nominal')
+  || !matchingArtifactText.includes('70.0% observed (reference p10–p90; nominal coverage not specified)')
+  || !matchingArtifactText.includes('matches both the selected prediction and prefix-history model')
+  || !mismatchedArtifactText.includes('artifact version does not match the selected prediction')
+  || mismatchedArtifactText.includes('MAE')
+  || !missingTrendVersionText.includes('Prefix-history model version unavailable; historical spread coverage is withheld')
+  || !missingTrendVersionText.includes('MAE 12.30 cycles')
+  || !unavailableArtifactText.includes('Saved FD001 artifact evaluation unavailable')
+  || unavailableArtifactText.includes('70.0%')) {
+  throw new Error('Saved FD001 artifact coverage must require a selected-model match and withhold unavailable or mismatched evidence');
+}
+console.log('  PASS  saved FD001 test metrics matching, mismatch, missing trend provenance, and unavailable states');
 const mockRulChartHtml = renderToString(React.createElement(RulHistoryChart, { trend: [] }));
 const noIntervalRulChartHtml = renderToString(React.createElement(RulHistoryChart, {
   trend: [{ cycle: 25, rul_cycles: 52.29, rul_low: null, rul_high: null }],

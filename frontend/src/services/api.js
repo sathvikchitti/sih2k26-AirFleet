@@ -235,6 +235,7 @@ export const api = {
   // replace evaluation output with fallback operational/demo data.
   getEvaluationSummary: async () => fetchJSON('/api/evaluation/summary'),
   getRiskBands: async () => fetchJSON('/api/policy/risk-bands'),
+  getFd001Metrics: async () => fetchJSON('/api/ml/fd001/metrics'),
   getWorkOrderRecommendation: async (woId) => {
     return fetchJSON('/api/work-orders/' + woId + '/recommendation');
   },

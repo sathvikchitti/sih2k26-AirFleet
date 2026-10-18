@@ -167,11 +167,48 @@ node --test scripts/prediction-contract.test.mjs
 ```
 
 
-## Initial read-only investigation for Tasks 6–7
+## Task 6 — saved FD001 official-test metrics
+
+The dedicated read-only route `GET /api/ml/fd001/metrics` projects the saved production-artifact reference from `backend/models/cmapss_fd001_rf_v1_metrics.json`. It reports metrics for 100 engines under the official final-observed-row protocol, with the official RUL labels used for scoring only. The raw RF tree p10–p90 interval is a nominal 80% range with 70% observed coverage; the separately named mean-inclusive envelope also has 70% observed coverage, but no nominal coverage claim. Both widths and all RUL values are in cycles, and both uncertainty methods remain uncalibrated. Missing, corrupt, or invalid saved metrics return HTTP 503 with a generic unavailable status; the route does not train or rescore.
+
+The trend response also carries the actual model version used for the history. This lets the detail view label model provenance from the backend response instead of assuming it from the provider selector. The existing `/api/evaluation/summary` remains the separate synthetic fleet-policy summary route.
+
+Frontend verification (from `frontend/`):
+
+```text
+npm run verify:views
+19/19 views passed
+
+npm run build
+passed (57 modules)
+
+node --test scripts/prediction-contract.test.mjs
+5/5 passed
+```
+
+Backend focused verification (from `backend/`):
+
+```text
+python -m pytest tests/test_fd001_metrics_api.py -q
+8 passed in 2.49s
+
+python -m py_compile app/routers/evaluation.py app/services/ml/fd001_provider.py app/services/compatibility.py app/routers/aircraft.py tests/test_fd001_metrics_api.py
+passed
+```
+
+Backend full verification (from `backend/`):
+
+```text
+python -m pytest tests -q --ignore=tests/test_api_compat.py
+279 passed in 109.39s
+```
+
+The compatibility script was excluded because it targets a mutable API server; no live demo runtime was reset for this check. The production model artifact SHA-256 remains `14114389BC8DC09449CDE646F9B582933B58FFA188F3955508CC2F3E87D30BE9`; neither the model artifact nor metrics JSON was modified for Task 6.
+
+## Initial read-only investigation for Task 7
 
 The initial inspection was read-only. The production FD001 model SHA-256 is `14114389BC8DC09449CDE646F9B582933B58FFA188F3955508CC2F3E87D30BE9`.
 
 - Task 2 initial finding: before the change, `backend/app/domain/knowledge.py` mapped engines 1–10 to `HP-204`. Task 2 changes the default to odd engines `HP-204`, even engines `OE-310`. The only other catalog part categorized as Engine is `OE-310` (`backend/app/data.py:87–90`). The validated `FD001_ENGINE_PART_MAPPING` override remains (`knowledge.py`); both defaults and overrides are demo assumptions, not aircraft/engine identity facts.
 - Task 3 initial finding: the pre-change read-only port-8011 probe returned no suggested moves at 30, 60, or 100 cycles. At 100 cycles, Alpha HP-204 expected demand was `0.4707`, stock/free `0`, shortfall `1`; Bravo demand `1.5970`, quantity `1`, minimum reserve `1`, transferable `0`, shortfall `2`; Charlie demand `1.4431`, quantity/free `1`, forecast-protected `1`, shortfall `1`. That was the all-HP-204 mapping and pre-change running process. After Task 2, the isolated 60-cycle probe described above found a feasible Charlie-to-Bravo HP-204 suggestion. These are different mapping snapshots; no fixture or inventory was altered.
-- Task 6: `GET /api/evaluation/summary` (`backend/app/routers/evaluation.py:12–33`) serves an aggregate synthetic scale-evaluation JSON, not the model metrics report. Official-test coverage values are in `backend/models/cmapss_fd001_rf_v1_metrics.json`; a UI coverage label would need an additive read-only projection or other agreed source. The README already labels the RF tree envelope uncalibrated.
 - Task 7: the model artifact is 19,662,518 bytes. The requested runtime data set (`train_FD001.txt`, `test_FD001.txt`, `RUL_FD001.txt`) plus `readme.txt` totals 5,747,082 bytes; together they total 25,409,600 bytes (25.41 decimal MB, 24.23 MiB). `.gitignore` excludes the model `*.joblib` and the whole `CMAPSSData/` directory; the model-metrics JSON is not ignored. The current machine has Python 3.14.0 with NumPy 2.4.4, scikit-learn 1.9.0, and joblib 1.5.3 installed; FastAPI 0.136.1, uvicorn 0.46.0, and Pydantic 2.13.3 differ from the repo's pinned versions. The metrics record NumPy 2.4.4 and scikit-learn 1.9.0. `py -0p` reports no registered Python installations; a Python 3.13 WindowsApps alias exists but failed in this shell. `pip cache list numpy` reports no locally built wheels, `frontend/node_modules` exists, and npm's protected cache setting could not be queried. The Docker CLI is present, but `docker info` cannot connect to the Docker Desktop Linux engine pipe, so container build/run was unavailable. No fresh clone, archive, dependency installation, cleanup, or container operation was attempted during this read-only pass.

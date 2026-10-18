@@ -2,7 +2,7 @@ import React from 'react';
 import { api, baseName, distanceText, etaText, failureProbabilityText, healthScoreText, rulText } from '../services/api.js';
 import { Badge, HealthBar, HealthChart, SectionTitle, riskColor, statusColor } from '../components/ui.jsx';
 import MaintenanceCasePanel from '../components/MaintenanceCasePanel.jsx';
-import { RulEnvelope, RulHistoryChart, TopSensorDrivers } from '../components/PredictionEvidence.jsx';
+import { Fd001ArtifactEvidence, RulEnvelope, RulHistoryChart, TopSensorDrivers } from '../components/PredictionEvidence.jsx';
 import RiskPolicyNote from '../components/RiskPolicyNote.jsx';
 
 // Closed loop: WAITING → IN TRANSIT → RECEIVED → READY → IN_PROGRESS → AVAILABLE
@@ -12,6 +12,9 @@ export default function AircraftDetail({ id, role, homeBase, onBack, refresh, re
   const [msg, setMsg] = React.useState('');
   const [workOrderStock, setWorkOrderStock] = React.useState(null);
   const [workOrderStockError, setWorkOrderStockError] = React.useState(null);
+  const [fd001Metrics, setFd001Metrics] = React.useState(null);
+  const [fd001MetricsLoading, setFd001MetricsLoading] = React.useState(false);
+  const [fd001MetricsError, setFd001MetricsError] = React.useState(false);
 
   const load = async () => {
     setD(null);
@@ -20,6 +23,26 @@ export default function AircraftDetail({ id, role, homeBase, onBack, refresh, re
     catch (e) { setLoadError(e?.message || 'Could not load aircraft details.'); }
   };
   React.useEffect(() => { load(); }, [id, refreshKey]);
+
+  React.useEffect(() => {
+    let active = true;
+    const health = d?.health || {};
+    const isFd001 = health.provider === 'fd001-random-forest'
+      || String(health.source || '').startsWith('cmapss-fd001')
+      || String(health.model_version || '').startsWith('cmapss-fd001');
+    setFd001Metrics(null);
+    setFd001MetricsError(false);
+    if (!isFd001) {
+      setFd001MetricsLoading(false);
+      return () => { active = false; };
+    }
+    setFd001MetricsLoading(true);
+    api.getFd001Metrics()
+      .then(result => { if (active) setFd001Metrics(result); })
+      .catch(() => { if (active) setFd001MetricsError(true); })
+      .finally(() => { if (active) setFd001MetricsLoading(false); });
+    return () => { active = false; };
+  }, [id, d?.health?.model_version, d?.health?.provider, d?.health?.source, refreshKey]);
 
   const modelComponent = d?.health?.required_component || d?.required_component || null;
   const activeWorkOrder = d?.work_orders?.find(wo => String(wo.status || '').toUpperCase() !== 'COMPLETED') || d?.maintenance || null;
@@ -92,7 +115,7 @@ export default function AircraftDetail({ id, role, homeBase, onBack, refresh, re
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12, fontSize: 13 }}>
             <div>Failure probability<br /><b>{failureProbabilityText(h)}</b></div>
             <div>Remaining useful life<br /><b>{rulText(h)}</b></div>
-            <div>Tree-spread envelope · uncalibrated<br /><b><RulEnvelope prediction={h} /></b></div>
+            <div>Uncalibrated model spread<br /><b><RulEnvelope prediction={h} /></b></div>
             <div>Confidence<br /><b>{failureProbabilityText({ failure_probability: h.confidence })}</b></div>
             <div>Predicted mx<br /><b>{h.predicted_maintenance == null ? 'Unavailable' : h.predicted_maintenance ? 'REQUIRED' : 'Not required'}</b></div>
             <div>Subsystem<br /><b>{h.subsystem || 'Unavailable'}</b></div>
@@ -124,6 +147,15 @@ export default function AircraftDetail({ id, role, homeBase, onBack, refresh, re
           <div className="ops-label">Health trend ({fd001PrefixTrend ? 'FD001 model predictions over synthetic engine history' : trendSource === 'illustrative_mock_curve' ? 'illustrative mock curve' : historySource === 'recorded' ? 'recorded' : 'illustrative'})</div>
           <div style={{ marginTop: 8 }}><HealthChart trend={d.trend} caption={healthTrendCaption} /></div>
           <div style={{ marginTop: 12 }}><RulHistoryChart trend={d.rul_trend} /></div>
+          {fd001PrefixTrend || h.provider === 'fd001-random-forest' || String(h.source || '').startsWith('cmapss-fd001') ? (
+            <Fd001ArtifactEvidence
+              metrics={fd001Metrics}
+              selectedModelVersion={h.model_version}
+              trendModelVersion={d.rul_trend_model_version}
+              loading={fd001MetricsLoading}
+              error={fd001MetricsError}
+            />
+          ) : null}
           <div style={{ fontSize: 11, color: '#5d6675', marginTop: 6 }}>
             {fd001PrefixTrend ? 'Retrospective Random Forest predictions over simulated NASA C-MAPSS FD001 test-engine prefixes mapped to this demo aircraft; not real aircraft telemetry.' : trendSource === 'illustrative_mock_curve' || d.is_synthetic || historySource !== 'recorded' ? 'Illustrative degradation trend — not raw sensor data.' : 'Recorded prediction history — not raw sensor data.'}
           </div>

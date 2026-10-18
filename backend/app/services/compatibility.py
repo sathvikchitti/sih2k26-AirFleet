@@ -205,6 +205,7 @@ def aircraft_detail(aircraft_id: str) -> dict | None:
         "trend_source": getattr(provider, "trend_source", "illustrative_provider_curve"),
         "rul_trend": rul_trend,
         "rul_trend_source": getattr(provider, "rul_trend_source", "unavailable"),
+        "rul_trend_model_version": getattr(provider, "rul_trend_model_version", None),
         "maintenance": legacy_maintenance(active),
         "resource_availability": stock,
         "recommendation": recommendation,
