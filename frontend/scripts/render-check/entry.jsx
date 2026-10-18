@@ -29,6 +29,7 @@ import MaintenanceResourcesView from '../../src/pages/views/MaintenanceResources
 import LogisticsBasesView from '../../src/pages/views/LogisticsBasesView.jsx';
 import Commander from '../../src/pages/Commander.jsx';
 import { BaseMissionReadiness, MissionReadinessBand } from '../../src/pages/Commander.jsx';
+import { DemandStockChart, ForecastEligibilityNotice } from '../../src/components/ResourceForecastPanel.jsx';
 import BaseManager from '../../src/pages/BaseManager.jsx';
 import Logistics from '../../src/pages/Logistics.jsx';
 import { compareTimeWeightedAvailability } from '../../src/components/ReadinessSimulationPanel.jsx';
@@ -159,6 +160,30 @@ if (!readinessHtml.includes('60.0%') || !readinessHtml.includes('15.0 pp')
   throw new Error('Commander readiness displays should preserve backend metrics, target, real zero, and unavailable values');
 }
 console.log('  PASS  Commander fleet and base readiness metrics (populated, zero, and unavailable cases)');
+
+const demandChartHtml = renderToString(React.createElement(DemandStockChart, {
+  componentRow: { component: 'HP-204', committed_available_for_transfer: 2, expected_demand: 1.375 },
+}));
+const unavailableDemandChartHtml = renderToString(React.createElement(DemandStockChart, {
+  componentRow: { component: 'HP-204', committed_available_for_transfer: 0, expected_demand: null },
+}));
+const demandChartText = html => html.replace(/<!--.*?-->/g, '');
+if (!demandChartText(demandChartHtml).includes('Expected demand 1.38') || !demandChartText(demandChartHtml).includes('Uncommitted transferable stock 2')
+  || !demandChartText(unavailableDemandChartHtml).includes('Expected demand Unavailable')
+  || !demandChartText(unavailableDemandChartHtml).includes('Uncommitted transferable stock 0')) {
+  throw new Error('Cycle demand chart should retain fractional expected demand, genuine zero stock, and unavailable demand');
+}
+console.log('  PASS  cycle resource stock-versus-demand chart (fractional and unavailable cases)');
+const forecastEligibilityHtml = renderToString(React.createElement(ForecastEligibilityNotice, {
+  forecast: { forecast_status: 'no_eligible_predictions', unavailable_prediction_count: 2, outside_horizon_prediction_count: 3 },
+}));
+const forecastEligibilityText = forecastEligibilityHtml.replace(/<!--.*?-->/g, '').replace(/<[^>]*>/g, '');
+if (!forecastEligibilityText.includes('No eligible cycle predictions overlap this horizon.')
+  || !forecastEligibilityText.includes('2 predictions unavailable')
+  || !forecastEligibilityText.includes('3 valid predictions fall outside the selected horizon')) {
+  throw new Error('Forecast eligibility notice should distinguish unavailable predictions from predictions outside the selected horizon');
+}
+console.log('  PASS  forecast eligibility messaging distinguishes unavailable and outside-horizon predictions');
 
 const CASES = [
   ['commander/dashboard', Commander, props],

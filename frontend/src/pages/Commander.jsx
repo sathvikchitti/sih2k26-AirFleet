@@ -2,6 +2,7 @@ import React from 'react';
 import { api, baseName, etaText, healthScoreText, rulText } from '../services/api.js';
 import { Badge, DataError, KpiCard, SectionTitle, riskColor } from '../components/ui.jsx';
 import ReadinessSimulationPanel from '../components/ReadinessSimulationPanel.jsx';
+import ResourceForecastPanel from '../components/ResourceForecastPanel.jsx';
 
 const finiteMetric = value => typeof value === 'number' && Number.isFinite(value);
 const percentLabel = value => finiteMetric(value) ? `${value.toFixed(1)}%` : '—';
@@ -252,6 +253,7 @@ export default function CommanderDashboard({ onOpenAircraft, refreshKey }) {
         </table>
       </div>
 
+      <ResourceForecastPanel canRequestMove={false} refreshKey={refreshKey} />
       <ReadinessSimulationPanel refreshKey={refreshKey} />
     </div>
   );

@@ -1,6 +1,7 @@
 import React from 'react';
 import { api, baseName } from '../services/api.js';
 import { SectionTitle, KpiCard } from '../components/ui.jsx';
+import ResourceForecastPanel from '../components/ResourceForecastPanel.jsx';
 
 export default function Logistics({ refreshKey, refresh }) {
   const [inv, setInv] = React.useState([]);
@@ -29,6 +30,7 @@ export default function Logistics({ refreshKey, refresh }) {
         <KpiCard label="Pending Transfers" value={transfers.filter(t => t.status === 'PENDING_APPROVAL').length} accent="#d8a93d" />
         <KpiCard label="In Transit" value={transfers.filter(t => t.status === 'IN_TRANSIT').length} accent="#4f9cf0" />
       </div>
+      <ResourceForecastPanel canRequestMove refreshKey={refreshKey} onRefresh={refresh} />
       {msg && <div style={{ marginTop: 10, fontSize: 13, color: '#d8a93d' }}>{msg}</div>}
       <SectionTitle>Component inventory</SectionTitle>
       <div className="ops-card" style={{ overflow: 'hidden' }}>

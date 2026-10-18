@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
 from ..domain import knowledge
@@ -12,6 +12,7 @@ from ..repositories.store import lock
 from ..security import require_demo_permission
 from ..services.compatibility import legacy_inventory_row
 from ..services import audit_service
+from ..services.demand_forecast_service import forecast_resources
 
 router = APIRouter(tags=["inventory", "components"])
 
@@ -47,6 +48,15 @@ def maintenance_knowledge():
 @router.get("/api/inventory")
 def inventory():
     return [legacy_inventory_row(i) for i in InventoryRepository.list_all()]
+
+
+@router.get("/api/resources/forecast")
+def resources_forecast(horizon_cycles: float = Query(default=30.0, ge=0, le=10000)):
+    """Indicative read-only cycle-based spares demand forecast."""
+    try:
+        return forecast_resources(horizon_cycles)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 class InventoryUpdate(BaseModel):

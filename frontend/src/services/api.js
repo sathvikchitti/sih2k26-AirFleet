@@ -213,6 +213,12 @@ export const api = {
     try { return await fetchJSON('/api/resources/demand' + (baseId ? '?base_id=' + baseId : '')); }
     catch (e) { useFallback = true; throw e; }
   },
+  // Cycle-based demand is a strict live-provider contract; never substitute
+  // illustrative fallback data when the selected prediction provider fails.
+  getResourceForecast: async (horizonCycles = 30) => {
+    const params = new URLSearchParams({ horizon_cycles: String(horizonCycles) });
+    return fetchJSON('/api/resources/forecast?' + params.toString());
+  },
   // Read-only deterministic allocation over a shared inventory snapshot.
   // This endpoint proposes allocations only; it does not create transfers.
   getAllocationPreview: async (workOrderIds) => {

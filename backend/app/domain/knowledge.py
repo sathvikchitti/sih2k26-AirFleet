@@ -16,6 +16,8 @@ There is deliberately no LLM/RAG component here.
 
 from __future__ import annotations
 
+import json
+import os
 from dataclasses import dataclass, field
 
 from .enums import Priority, RiskLevel
@@ -102,6 +104,53 @@ MAINTENANCE_RULES: tuple[MaintenanceRule, ...] = (
 )
 
 _RULES_BY_SUBSYSTEM = {_normalise(r.subsystem): r for r in MAINTENANCE_RULES}
+
+# C-MAPSS FD001 predicts engine RUL, not a subsystem or a component. This
+# configurable mapping is a demo assumption only; it must never be presented
+# as a model diagnosis. Keep the default explicit and limited to the ten
+# mapped FD001 example engines. Deployments may provide a JSON object such as
+# {"1":"HP-204","2":"OE-310"} via FD001_ENGINE_PART_MAPPING.
+FD001_ENGINE_PART_MAPPING: dict[int, str] = {engine_id: "HP-204" for engine_id in range(1, 11)}
+
+
+def fd001_engine_part_mapping() -> tuple[dict[int, str], str]:
+    """Return a validated demo-only engine-to-engine-part mapping.
+
+    The optional environment override is data, never executable code. Only
+    catalogued Engine-category parts and positive integer engine IDs are
+    accepted.
+    """
+    raw = os.getenv("FD001_ENGINE_PART_MAPPING")
+    if raw is None or not raw.strip():
+        return dict(FD001_ENGINE_PART_MAPPING), "built_in_demo_assumption"
+    try:
+        value = json.loads(raw)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("FD001_ENGINE_PART_MAPPING must be a JSON object") from exc
+    if not isinstance(value, dict) or not value:
+        raise ValueError("FD001_ENGINE_PART_MAPPING must be a non-empty JSON object")
+
+    # Import lazily to keep the domain mapping independent during module load.
+    from ..data import PARTS
+    engine_parts = {
+        str(row["part_number"]).upper()
+        for row in PARTS if str(row.get("category", "")).casefold() == "engine"
+    }
+    mapping: dict[int, str] = {}
+    for raw_id, raw_part in value.items():
+        try:
+            engine_id = int(raw_id)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("FD001 mapping keys must be positive engine IDs") from exc
+        if engine_id < 1 or str(engine_id) != str(raw_id):
+            raise ValueError("FD001 mapping keys must be canonical positive engine IDs")
+        if not isinstance(raw_part, str):
+            raise ValueError("FD001 mapping values must be component part numbers")
+        part_number = raw_part.strip().upper()
+        if part_number not in engine_parts:
+            raise ValueError(f"FD001 mapping component {part_number!r} is not an engine-category part")
+        mapping[engine_id] = part_number
+    return mapping, "environment_configured_demo_assumption"
 
 
 @dataclass

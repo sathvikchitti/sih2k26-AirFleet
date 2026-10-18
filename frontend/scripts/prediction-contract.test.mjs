@@ -86,3 +86,34 @@ test('FD001 nullable prediction contract stays distinct from offline demo fallba
     globalThis.fetch = originalFetch;
   }
 });
+
+test('cycle resource forecast preserves fractional demand and propagates provider errors', async () => {
+  const originalFetch = globalThis.fetch;
+  let requestedUrl = '';
+  const response = {
+    forecast_status: 'available',
+    horizon_cycles: 30,
+    demand_method: 'indicative uncalibrated normal approximation',
+    mutated_state: false,
+    bases: [{ base_id: 'alpha', components: [{ component: 'HP-204', expected_demand: 1.375, projected_shortfall: 0 }] }],
+  };
+  try {
+    globalThis.fetch = async url => {
+      requestedUrl = String(url);
+      return { ok: true, status: 200, json: async () => response };
+    };
+    const forecast = await api.getResourceForecast(30);
+    assert.match(requestedUrl, /\/api\/resources\/forecast\?horizon_cycles=30$/);
+    assert.equal(forecast.bases[0].components[0].expected_demand, 1.375);
+    assert.equal(forecast.mutated_state, false);
+
+    globalThis.fetch = async () => ({
+      ok: false,
+      status: 503,
+      json: async () => ({ detail: 'Selected prediction provider unavailable' }),
+    });
+    await assert.rejects(api.getResourceForecast(30), error => error.status === 503);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
