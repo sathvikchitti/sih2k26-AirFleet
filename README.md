@@ -14,7 +14,17 @@ A deterministic proof of concept for connecting aircraft condition predictions t
 
 ## Run the FD001 demo
 
-The one-command launchers run the trained local FD001 provider with the six-case `fd001_operations` fixture. Install backend and frontend dependencies first (`python -m pip install -r backend/requirements.txt` and `npm ci` from `frontend/`). The model artifact and `CMAPSSData/test_FD001.txt` must be present; the launcher fails clearly if either is missing and never retrains the model. FD001 data is simulated engine history, mapped to demo aircraft IDs; it is not live aircraft telemetry.
+The one-command launchers run the trained local FD001 provider with the six-case `fd001_operations` fixture. Python 3.14 was verified for the local backend install; use a virtual environment and install backend dependencies, then run `npm ci` from `frontend/` for the UI. The Dockerfile uses Python 3.12, but Docker Engine was unavailable for a container build check. The repository includes the model artifact and FD001 source files; the launcher fails clearly if required files are missing and never retrains the model. FD001 data is simulated engine history, mapped to demo aircraft IDs; it is not live aircraft telemetry.
+
+On Windows, create and activate an isolated backend environment from the repository root:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r backend/requirements.txt
+```
+
+On macOS or Linux, use `python3.14 -m venv .venv`, activate with `source .venv/bin/activate`, and run `python -m pip install -r backend/requirements.txt`. Install frontend dependencies with `npm ci` from `frontend/`.
 
 On Windows, from the repository root:
 
@@ -31,6 +41,8 @@ chmod +x ./run_demo.sh
 
 Both launchers default to the frontend at `http://localhost:5173` and backend at `http://127.0.0.1:8000`. They check both loopback ports before starting and never stop an existing process. Keep the launcher running while using the demo; Ctrl+C stops only the backend and frontend processes it started. Logs are written under `backend/` and ignored by Git. If a port is occupied, choose unused ports. PowerShell accepts `-BackendPort 8011 -FrontendPort 5179`; Bash accepts `DEMO_BACKEND_PORT=8011 DEMO_FRONTEND_PORT=5179 ./run_demo.sh`. The frontend uses the same-origin `/api` proxy: `API_PROXY_TARGET` is server-only and `VITE_API_BASE` is explicitly empty.
 
+For an explicit API rehearsal on a disposable loopback demo, run `python scripts/demo_api_rehearsal.py --base-url http://127.0.0.1:8000` for a read-only preflight. Add `--allow-demo-mutations` only when you intend the script to request, approve, receive, triage, start, and complete operations in that in-memory instance. The script never resets state and refuses mutation mode on non-loopback URLs; use a fresh disposable launcher instance for this sequence.
+
 The same demo can run in Docker when Docker Engine and Compose are installed:
 
 ```powershell
@@ -38,6 +50,8 @@ docker compose up --build
 ```
 
 Compose binds both services to loopback. To avoid occupied default ports, set `DEMO_BACKEND_PORT` and `DEMO_FRONTEND_PORT` in the environment before `docker compose up --build` (for example `8011` and `5179`); Compose fails without stopping any process if a requested port is busy. The backend image copies the existing model artifact and local `CMAPSSData` into the image. Use `docker compose down` to stop the containers you started. The backend reset control is enabled for this local demo, so do not expose it to a shared or public network.
+
+**Docker not verified.** The Docker CLI is installed, but `docker info` cannot connect to the Docker Desktop Linux engine on this host. The image build and Compose startup instructions above have not been exercised here.
 
 The launchers require already-installed dependencies. For the manual development workflow, the backend uses FastAPI and in-memory repositories, while the frontend uses React and Vite:
 
@@ -122,19 +136,19 @@ The mock provider emits synthetic, deterministic demo values and identifies its 
 
 ## NASA C-MAPSS FD001 model
 
-The local model path uses the official NASA Ames Prognostics Center of Excellence C-MAPSS simulated turbofan data. The canonical [Data.gov dataset record](https://catalog.data.gov/dataset/cmapss-jet-engine-simulated-data) links NASA's [CMAPSSData.zip](https://data.nasa.gov/docs/legacy/CMAPSSData.zip); the NASA [PCoE data repository](https://www.nasa.gov/intelligent-systems-division/discovery-and-systems-health/pcoe/pcoe-data-set-repository/) describes the turbofan degradation simulation. Place the extracted `train_FD001.txt`, `test_FD001.txt`, and `RUL_FD001.txt` files in repository-root `CMAPSSData/`. The current local copies contain 100 engine train series, 100 test series, and 100 official final RUL labels. The local copies are not accompanied by a signed checksum manifest, so their exact chain of custody cannot be independently verified; the training report records the training file hash for reproducibility.
+The local model path uses the official NASA Ames Prognostics Center of Excellence C-MAPSS simulated turbofan data. The canonical [Data.gov dataset record](https://catalog.data.gov/dataset/cmapss-jet-engine-simulated-data) links NASA's [CMAPSSData.zip](https://data.nasa.gov/docs/legacy/CMAPSSData.zip); the NASA [PCoE data repository](https://www.nasa.gov/intelligent-systems-division/discovery-and-systems-health/pcoe/pcoe-data-set-repository/) describes the turbofan degradation simulation. This repository bundles FD001's `train_FD001.txt`, `test_FD001.txt`, `RUL_FD001.txt`, and source `readme.txt` under `CMAPSSData/`; the files are stored without line-ending conversion. They contain 100 engine train series, 100 test series, and 100 official final RUL labels. The bundled copies have no signed checksum manifest, so their chain of custody cannot be independently verified; their current SHA-256 values are recorded in the release verification report.
 
-Install backend dependencies (`numpy`, `scikit-learn`, and `joblib` are pinned in `backend/requirements.txt`) and train from `backend/`:
+Training is optional; the launchers use the bundled production artifact and do not train. If you deliberately evaluate a new model, install backend dependencies in an isolated environment and train to a separate candidate path from `backend/`:
 
 ```powershell
-python -m app.services.ml.train_fd001 --metrics models/cmapss_fd001_rf_v1_metrics.json
+python -m app.services.ml.train_fd001 --artifact models/cmapss_fd001_rf_v1_candidate.joblib --metrics models/cmapss_fd001_rf_v1_candidate_metrics.json --reference-artifact models/cmapss_fd001_rf_v1.joblib
 ```
 
 The script fits a 200-tree Random Forest to run-to-failure training RUL targets capped at 125 cycles. It creates a deterministic engine-grouped 80/20 validation split (seed 42); validation evaluates one 80%-prefix observation from each held-out engine. Feature construction uses cycle plus trailing-window summaries of the three settings and 21 sensors. Feature filtering is fit on training data only. The saved artifact contains preprocessing and estimator. The official FD001 test protocol fits using all training engines, predicts the last observed row of each test engine, then reads `RUL_FD001.txt` only for final scoring. Inference loads test histories without reading the RUL label file.
 
 The reusable prediction interface is `FD001RULModel.load(path).predict_history(history)` in `backend/app/services/ml/fd001_model.py`; `load_engine_histories(data_dir, split="test")` provides feature histories without loading target labels. `FD001MLProvider` supplies the app adapter and maps demo aircraft IDs to those fixed test-engine histories.
 
-Latest reproducible run with seed 42: grouped validation RF MAE/RMSE 11.2843/14.5745 cycles (median baseline 62.7000/63.2519); official final-test RF MAE/RMSE 13.7862/18.6998 cycles (median baseline 39.0800/49.8199). These are results on simulated FD001 engines, not evidence of real-aircraft performance. The weaker official-test result relative to the grouped validation split is retained as measured; no tuning claim is made. The generated `.joblib` model and metrics JSON are ignored artifacts and should be recreated with the training command when absent.
+Latest reproducible run with seed 42: grouped validation RF MAE/RMSE 11.2843/14.5745 cycles (median baseline 62.7000/63.2519); official final-test RF MAE/RMSE 13.7862/18.6998 cycles (median baseline 39.0800/49.8199). These are results on simulated FD001 engines, not evidence of real-aircraft performance. The weaker official-test result relative to the grouped validation split is retained as measured; no tuning claim is made. The repository includes the fitted `cmapss_fd001_rf_v1.joblib` artifact and its NASA C-MAPSS source files for reproducible local use; the saved metrics JSON is a tracked reference report. The command above writes a candidate artifact and report and scores the bundled artifact read-only.
 
 `GET /api/ml/fd001/metrics` returns a validated read-only projection of the saved official-test metrics reference for the existing RF artifact. It reports the scoring protocol, artifact version/hash, and results for 100 test engines. The raw per-engine p10–p90 RF tree interval has nominal coverage 80%; observed coverage was 70%. The separate mean-inclusive envelope (the raw bounds expanded when necessary to include the forest mean) also had observed coverage 70%; no nominal coverage is assigned to this expanded envelope. Both are uncalibrated. The route reads the saved metrics JSON and does not retrain or rescore. Missing, corrupt, or invalid metrics produce HTTP 503 with `metrics_status: "unavailable"`. This endpoint is distinct from `GET /api/evaluation/summary`, which serves aggregate synthetic fleet-policy results.
 
@@ -210,8 +224,8 @@ backend/app/services/ml/   mock and FD001 model, trainer, provider adapter
 backend/app/services/      recommendation, impact, maintenance, transfer
 backend/app/repositories/  in-memory state and repositories
 backend/app/domain/        workflow enums and subsystem knowledge rules
-CMAPSSData/                locally acquired raw NASA dataset (ignored)
-backend/models/            generated trained artifact and metrics (ignored)
+CMAPSSData/                bundled NASA C-MAPSS FD001 source files (byte-preserved)
+backend/models/            bundled fitted FD001 model and tracked metrics reference
 frontend/src/              React pages and API integration
 ```
 

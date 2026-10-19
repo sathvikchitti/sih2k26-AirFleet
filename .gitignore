@@ -1,10 +1,20 @@
-# NASA C-MAPSS source data is kept local and separate from application code.
-CMAPSSData/
+# NASA C-MAPSS source data stays separate from application code. Only the
+# source files used by the bundled FD001 demo are versioned.
+CMAPSSData/*
+!CMAPSSData/readme.txt
+!CMAPSSData/train_FD001.txt
+!CMAPSSData/test_FD001.txt
+!CMAPSSData/RUL_FD001.txt
 
-# Generated, versioned model artifact and evaluation output.
+# Generated model artifacts and evaluation output, except the documented
+# production FD001 model used by the local demo and its tracked metrics report.
 backend/models/*.joblib
 backend/models/*_metrics.json
+!backend/models/cmapss_fd001_rf_v1.joblib
 !backend/models/cmapss_fd001_rf_v1_metrics.json
+
+# Keep generated submission bundles out of the source tree.
+/submission/
 
 # Python test/runtime output.
 __pycache__/
@@ -22,3 +32,4 @@ frontend/dist-render-check/
 .env.*
 !.env.example
 !.env.*.example
+.venv/

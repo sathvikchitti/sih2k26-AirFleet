@@ -1,0 +1,116 @@
+{
+  "run": {
+    "command": "python scripts/demo_api_rehearsal.py --base-url http://127.0.0.1:8013 --allow-demo-mutations",
+    "target": "fresh packaged export at http://127.0.0.1:8013",
+    "exit_code": 0,
+    "mutations_run": true,
+    "reset_run": false,
+    "scenario_id": "fd001_operations_v1",
+    "aircraft_count": 10,
+    "model_version": "cmapss-fd001-rf-v1",
+    "health_contract": "cycles with null failure_probability"
+  },
+  "forecast": {
+    "horizon_cycles": 60,
+    "eligible_prediction_count": 2,
+    "suggested_move_count": 1,
+    "move": {
+      "action": "create_transfer",
+      "part_number": "HP-204",
+      "quantity": 1,
+      "source_base": "charlie",
+      "destination_base": "bravo",
+      "eta_hours": 4.3,
+      "distance_km": 260,
+      "condition_pct": 84,
+      "minimum_condition_pct": 40,
+      "feasible": true
+    }
+  },
+  "forecast_transfer": {
+    "transfer_id": "T-105",
+    "status": "RECEIVED",
+    "actors": ["logistics", "logistics"],
+    "part_number": "HP-204",
+    "quantity": 1,
+    "source_base": "charlie",
+    "destination_base": "bravo",
+    "linkage": "unbound forecast suggestion; no aircraft diagnosis claimed",
+    "stock_before": {
+      "source": {"quantity": 1, "reserved": 0, "minimum_reserve": 0, "available_for_transfer": 1, "condition_pct": 84},
+      "destination": {"quantity": 1, "reserved": 0, "minimum_reserve": 1, "available_for_transfer": 0, "condition_pct": 42}
+    },
+    "stock_after": {
+      "source": {"quantity": 0, "reserved": 0, "minimum_reserve": 0, "available_for_transfer": 0, "condition_pct": 84},
+      "destination": {"quantity": 2, "reserved": 0, "minimum_reserve": 1, "available_for_transfer": 1, "condition_pct": 42}
+    }
+  },
+  "maintenance_case": {
+    "aircraft_id": "A32",
+    "event_id": "PM-002",
+    "event_status_before_triage_call": "WORK_ORDER_CREATED",
+    "triage_result": "returned existing fixture work order; no new WO claimed",
+    "work_order_id": "WO-1046",
+    "component": "FP-102",
+    "component_source": "human_selected",
+    "recommendation_source": "alpha",
+    "transfer_id": "T-106",
+    "transfer_status": "RECEIVED",
+    "actors": ["base", "commander", "logistics", "base"],
+    "stock_before": {
+      "source": {"quantity": 4, "reserved": 0, "minimum_reserve": 1, "available_for_transfer": 3, "condition_pct": 91},
+      "destination": null
+    },
+    "stock_after": {
+      "source": {"quantity": 3, "reserved": 0, "minimum_reserve": 1, "available_for_transfer": 2, "condition_pct": 91},
+      "destination": {"quantity": 0, "reserved": 0, "minimum_reserve": 0, "available_for_transfer": 0, "condition_pct": 91}
+    },
+    "work_order_status": "COMPLETED",
+    "availability_after_completion": "AT_RISK",
+    "health_before": {"rul": 65.43856970806968, "rul_unit": "cycles", "health_score": 52.0, "failure_probability": null, "model_version": "cmapss-fd001-rf-v1"},
+    "health_after": {"rul": 65.43856970806968, "rul_unit": "cycles", "health_score": 52.0, "failure_probability": null, "model_version": "cmapss-fd001-rf-v1"},
+    "health_prediction_unchanged": true,
+    "timeline_linkage": {
+      "linked_event_count": 1,
+      "unknown_origin_event_ids": [],
+      "unlinked_event_ids": [],
+      "unlinked_prediction_audit_ids": [],
+      "method": "explicit stored IDs only; legacy time-based inference is not performed"
+    }
+  },
+  "fleet_availability": {
+    "before": {"available": 4, "total": 10, "availability_pct": 40.0},
+    "after": {"available": 4, "total": 10, "availability_pct": 40.0}
+  },
+  "api_calls": [
+    ["GET", "/api/demo/scenario", "read-only"],
+    ["GET", "/api/aircraft", "read-only"],
+    ["GET", "/api/resources/forecast?horizon_cycles=60", "read-only"],
+    ["GET", "/api/fleet/overview", "read-only"],
+    ["GET", "/api/aircraft/A32", "read-only"],
+    ["GET", "/api/inventory", "read-only"],
+    ["POST", "/api/transfers", "logistics"],
+    ["POST", "/api/transfers/T-105/approve", "logistics"],
+    ["POST", "/api/transfers/T-105/receive?actor=logistics", "logistics"],
+    ["GET", "/api/inventory", "read-only"],
+    ["GET", "/api/maintenance/work-orders/WO-1046", "read-only"],
+    ["GET", "/api/maintenance/events/PM-002", "read-only"],
+    ["POST", "/api/maintenance/events/PM-002/work-order", "base:charlie"],
+    ["GET", "/api/work-orders/WO-1046/recommendation", "read-only"],
+    ["GET", "/api/inventory", "read-only"],
+    ["POST", "/api/work-orders/WO-1046/recommendation/approve", "commander"],
+    ["POST", "/api/transfers/T-106/receive?actor=logistics", "logistics"],
+    ["GET", "/api/maintenance/work-orders/WO-1046", "read-only"],
+    ["POST", "/api/maintenance/work-orders/WO-1046/start?actor=base", "base:charlie"],
+    ["POST", "/api/maintenance/work-orders/WO-1046/complete?actor=base", "base:charlie"],
+    ["GET", "/api/aircraft/A32", "read-only"],
+    ["GET", "/api/inventory", "read-only"],
+    ["GET", "/api/fleet/overview", "read-only"],
+    ["GET", "/api/aircraft/A32/maintenance-timeline?work_order_id=WO-1046", "read-only"]
+  ],
+  "limitations": [
+    "The fixture already had PM-002 linked to WO-1046; triage reused it idempotently, so this run does not claim a new work order was created.",
+    "Maintenance completion did not alter the FD001 health prediction or convert RUL cycles into time; A32 remained AT_RISK.",
+    "The rehearsal script does not fetch or report an audit-event count."
+  ]
+}

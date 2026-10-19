@@ -1,0 +1,9 @@
+# Normalize source text files for consistent checkouts.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+
+# Preserve the published dataset and fitted model byte-for-byte. In particular,
+# Git must not rewrite line endings in the NASA input files used by training.
+CMAPSSData/* -text
+backend/models/cmapss_fd001_rf_v1.joblib binary
