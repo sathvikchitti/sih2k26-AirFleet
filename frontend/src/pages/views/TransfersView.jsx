@@ -5,11 +5,12 @@ import {
   ActionButton, Badge, Empty, KpiCard, Loading, PageHeader, SearchInput,
   SectionTitle, Select, StatusMsg, Table,
 } from '../../components/ui.jsx';
+import { C } from '../../theme.js';
 
 const TONE = {
-  PENDING_APPROVAL: '#d8a93d',
-  IN_TRANSIT: '#4f9cf0',
-  RECEIVED: '#3fb97f',
+  PENDING_APPROVAL: C.warn,
+  IN_TRANSIT: C.info,
+  RECEIVED: C.ok,
 };
 
 const quantityText = value => value == null || value === '' || !Number.isFinite(Number(value))
@@ -102,9 +103,9 @@ export default function TransfersView({ refreshKey, refresh }) {
 
       <div className="ops-kpi-grid">
         <KpiCard label="Total Transfers" value={list.length} />
-        <KpiCard label="Pending Approval" value={list.filter(t => t.status === 'PENDING_APPROVAL').length} accent="#d8a93d" />
-        <KpiCard label="In Transit" value={list.filter(t => t.status === 'IN_TRANSIT').length} accent="#4f9cf0" />
-        <KpiCard label="Received" value={list.filter(t => t.status === 'RECEIVED').length} accent="#3fb97f" />
+        <KpiCard label="Pending Approval" value={list.filter(t => t.status === 'PENDING_APPROVAL').length} accent={C.warn} />
+        <KpiCard label="In Transit" value={list.filter(t => t.status === 'IN_TRANSIT').length} accent={C.info} />
+        <KpiCard label="Received" value={list.filter(t => t.status === 'RECEIVED').length} accent={C.ok} />
       </div>
 
       <StatusMsg>{msg}</StatusMsg>
@@ -120,7 +121,7 @@ export default function TransfersView({ refreshKey, refresh }) {
             label={partsError ? 'Catalogue unavailable' : parts == null ? 'Loading component catalogue…' : parts.length ? 'Select component…' : 'No components in catalogue'}
             options={(parts || []).map(p => ({ value: p.part_number, label: p.part_number + ' · ' + p.name }))}
           />
-          {partsError ? <div role="alert" style={{ color: '#e05c5c', fontSize: 11, marginTop: 5 }}>Live component catalogue unavailable. Transfer creation is disabled. {partsError.message}</div> : null}
+          {partsError ? <div role="alert" style={{ color: C.crit, fontSize: 11, marginTop: 5 }}>Live component catalogue unavailable. Transfer creation is disabled. {partsError.message}</div> : null}
         </div>
         <div className="ops-form-field">
           <label className="ops-form-label" htmlFor="transfer-source">From</label>
@@ -183,7 +184,7 @@ export default function TransfersView({ refreshKey, refresh }) {
           minWidth={980}
           rows={rows}
           columns={[
-            { key: 'id', label: 'ID', render: t => <span className="font-mono">{t.id}</span> },
+            { key: 'id', label: 'ID', nowrap: true, render: t => <span className="ops-id">{t.id}</span> },
             { key: 'part_number', label: 'Part', render: t => <b>{t.part_number}</b> },
             { key: 'route', label: 'Route', render: t => baseName(t.source_base) + ' → ' + baseName(t.dest_base) },
             { key: 'quantity', label: 'Qty', align: 'right', render: t => <span className="ops-number">{quantityText(t.quantity)}</span> },
@@ -192,12 +193,12 @@ export default function TransfersView({ refreshKey, refresh }) {
             {
               key: 'for_aircraft', label: 'For',
               render: t => (t.for_aircraft
-                ? <b style={{ color: '#d8a93d' }}>{t.for_aircraft}</b>
-                : <span style={{ color: '#5d6675' }}>—</span>),
+                ? <b style={{ color: C.warn }}>{t.for_aircraft}</b>
+                : <span style={{ color: C.dim }}>—</span>),
             },
             {
               key: 'status', label: 'Status',
-              render: t => <Badge color={TONE[t.status] || '#8b94a3'}>{String(t.status).replace(/_/g, ' ')}</Badge>,
+              render: t => <Badge color={TONE[t.status] || C.muted}>{String(t.status).replace(/_/g, ' ')}</Badge>,
             },
             {
               key: 'action', label: 'Action', align: 'right',
@@ -213,7 +214,7 @@ export default function TransfersView({ refreshKey, refresh }) {
                       Simulate arrival
                     </ActionButton>
                   )}
-                  {t.status === 'RECEIVED' && <span style={{ fontSize: 11, color: '#3fb97f' }}>landed</span>}
+                  {t.status === 'RECEIVED' && <span style={{ fontSize: 11, color: C.ok }}>landed</span>}
                 </div>
               ),
             },
@@ -230,13 +231,13 @@ export default function TransfersView({ refreshKey, refresh }) {
         return (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 12 }}>
             {inFlight.map(t => (
-              <div key={t.id} className="ops-card" style={{ padding: 14, borderLeft: '4px solid #4f9cf0' }}>
+              <div key={t.id} className="ops-card ops-callout" style={{ '--callout': C.info, padding: '14px 18px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <b>{t.for_aircraft}</b>
                   <Badge color={TONE[t.status]}>{String(t.status).replace(/_/g, ' ')}</Badge>
                 </div>
-                <div style={{ fontSize: 12, color: '#8b94a3', marginTop: 6 }}>
-                  Waiting on <b style={{ color: '#d8a93d' }}>{t.part_number}</b> from {baseName(t.source_base)}, ETA {etaText(t.eta_hours)}
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>
+                  Waiting on <b style={{ color: C.warn }}>{t.part_number}</b> from {baseName(t.source_base)}, ETA {etaText(t.eta_hours)}
                 </div>
                 <div style={{ fontSize: 12, marginTop: 6 }}>
                   Destination: {baseName(t.dest_base)} ·{' '}

@@ -5,21 +5,22 @@ export default {
     extend: {
       colors: {
         ops: {
-          bg: '#0d1117',
-          panel: '#151b24',
-          panel2: '#1c2431',
-          border: '#2a3444',
-          muted: '#8b94a3',
-          accent: '#d8a93d',
-          accent2: '#4f9cf0',
-          ok: '#3fb97f',
-          warn: '#d8a93d',
-          crit: '#e05c5c'
+          bg: '#0b0c0d',
+          panel: '#121416',
+          panel2: '#181b1e',
+          border: '#25292e',
+          muted: '#878e95',
+          accent: '#8fe388',
+          accent2: '#7aa6c8',
+          ok: '#8fe388',
+          warn: '#f2a33a',
+          crit: '#f0524a'
         }
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'Segoe UI', 'Roboto', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Consolas', 'monospace']
+        display: ['Big Shoulders', 'Barlow Condensed', 'Arial Narrow', 'sans-serif'],
+        sans: ['Instrument Sans', 'Inter', 'system-ui', 'Segoe UI', 'sans-serif'],
+        mono: ['Geist Mono', 'JetBrains Mono', 'Consolas', 'monospace']
       }
     }
   },

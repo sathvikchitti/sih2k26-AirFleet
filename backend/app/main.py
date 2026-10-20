@@ -14,7 +14,7 @@ import os
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi import Header, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.encoders import jsonable_encoder
@@ -28,11 +28,13 @@ from .services.maintenance_service import MaintenanceTransitionError, ingest_pre
 from .domain.enums import Permission
 from .security import (require_demo_permission, reset_enabled,
                        validate_permission_config)
+from .access import evaluator_access, frontend_origins, validate_access_config
 
 app = FastAPI(title="Aircraft Fleet Readiness & Sustainment API", version="0.2.0")
 
 # Reject typos during startup rather than silently selecting a weaker mode.
 validate_permission_config()
+validate_access_config()
 
 
 @app.exception_handler(PredictionValidationError)
@@ -83,13 +85,24 @@ async def request_validation_error(_request: Request, exc: RequestValidationErro
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[origin.strip() for origin in os.getenv(
-        "FRONTEND_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
-    ).split(",") if origin.strip()],
+    allow_origins=frontend_origins(),
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.middleware("http")(evaluator_access)
+
+
+@app.get("/livez", include_in_schema=False)
+def liveness():
+    return {"ok": True}
+
+
+@app.get("/login", include_in_schema=False)
+def evaluator_login():
+    # A top-level browser challenge caches Basic credentials for this origin.
+    # The same-origin frontend proxy forwards subsequent Authorization headers.
+    return RedirectResponse("/", status_code=303)
 
 def initialize_demo_state() -> None:
     """Initialize provider-consistent demo state for the selected ML source.

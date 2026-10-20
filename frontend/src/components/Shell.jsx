@@ -1,5 +1,6 @@
 import React from 'react';
 import { api } from '../services/api.js';
+import { C } from '../theme.js';
 
 // Sidebar menu per role. `key` is the stable view id used for routing;
 // `label` is what the user sees. Keys are unique per role.
@@ -12,6 +13,7 @@ export const NAV = {
     { key: 'maintenance', label: 'Maintenance' },
     { key: 'resources', label: 'Resources' },
     { key: 'recommendations', label: 'Recommendations' },
+    { key: 'docs', label: 'Documentation' },
   ],
   base: [
     { key: 'dashboard', label: 'Dashboard' },
@@ -19,6 +21,7 @@ export const NAV = {
     { key: 'aircraft', label: 'Aircraft' },
     { key: 'maintenance', label: 'Maintenance' },
     { key: 'resources', label: 'Resources' },
+    { key: 'docs', label: 'Documentation' },
   ],
   logistics: [
     { key: 'dashboard', label: 'Dashboard' },
@@ -27,6 +30,7 @@ export const NAV = {
     { key: 'transfers', label: 'Transfers' },
     { key: 'mxresources', label: 'Maintenance Resources' },
     { key: 'bases', label: 'Bases' },
+    { key: 'docs', label: 'Documentation' },
   ],
 };
 
@@ -40,25 +44,36 @@ const ROLE_LABEL = {
   logistics: 'Logistics Officer',
 };
 
+function zuluTime(d) {
+  return d.toISOString().slice(11, 16).replace(':', '') + 'Z';
+}
+
 export function Shell({ role, onRole, view, setView, onOpenAircraft, children, onReset, resetMsg }) {
   const items = navFor(role);
   const [connectionStatus, setConnectionStatus] = React.useState(() => api.getConnectionStatus());
+  const [now, setNow] = React.useState(() => new Date());
   React.useEffect(() => {
-    const timer = setInterval(() => setConnectionStatus(api.getConnectionStatus()), 500);
+    const timer = setInterval(() => { setConnectionStatus(api.getConnectionStatus()); setNow(new Date()); }, 500);
     return () => clearInterval(timer);
   }, []);
+  const path = connectionStatus?.url ? String(connectionStatus.url).replace(/^https?:\/\/[^/]+/, '') : '';
   const responseLabel = connectionStatus?.url
     ? connectionStatus.ok
-      ? `Last API response HTTP ${connectionStatus.status} · ${String(connectionStatus.url).replace(/^https?:\/\/[^/]+/, '')}`
+      ? `Last API response HTTP ${connectionStatus.status} · ${path}`
       : connectionStatus.status
-        ? `API responded HTTP ${connectionStatus.status} · ${String(connectionStatus.url).replace(/^https?:\/\/[^/]+/, '')}`
-        : `No API response · ${String(connectionStatus.url).replace(/^https?:\/\/[^/]+/, '')}`
+        ? `API responded HTTP ${connectionStatus.status} · ${path}`
+        : `No API response · ${path}`
     : 'No API response recorded';
+  const linkState = !connectionStatus?.url ? '' : connectionStatus.ok ? ' is-ok' : ' is-bad';
+  const activeLabel = (items.find(i => i.key === view) || {}).label || '';
 
   return (
     <div className="ops-shell">
       <aside className="ops-sidebar">
-        <div className="ops-brand">FLEET READINESS</div>
+        <div className="ops-brand">
+          <div className="ops-brand-name">Fleet<br />Readiness</div>
+          <div className="ops-brand-sub">Aircraft sustainment platform</div>
+        </div>
         <div className="ops-label ops-role-label">{ROLE_LABEL[role] || role}</div>
         <nav className="ops-nav-list" aria-label="Primary navigation">
           {items.map(i => (
@@ -70,18 +85,33 @@ export function Shell({ role, onRole, view, setView, onOpenAircraft, children, o
           ))}
         </nav>
         <div className="ops-sidebar-footer">
-          <div style={{ fontSize: 11, color: '#8b94a3' }}>
-            Demo role: <b style={{ color: '#e6e9ee' }}>{ROLE_LABEL[role] || role}</b>
-            <div title={connectionStatus?.url || ''} style={{ marginTop: 3 }}>{responseLabel}{connectionStatus?.at ? ` · ${new Date(connectionStatus.at).toLocaleTimeString()}` : ''}</div>
+          <div className="ops-sidebar-note">
+            Demo role: <b>{ROLE_LABEL[role] || role}</b>
           </div>
-          {role === 'commander' && <button onClick={onReset} style={{ fontSize: 12, background: 'transparent', border: '1px solid #2a3444', color: '#8b94a3', borderRadius: 6, padding: '6px 8px', cursor: 'pointer' }}>Reset demo</button>}
-          {role === 'commander' && resetMsg && <div role="status" style={{ fontSize: 11, color: '#d8a93d' }}>{resetMsg}</div>}
-          <button onClick={onRole} style={{ fontSize: 12, background: '#1c2431', border: '1px solid #2a3444', color: '#e6e9ee', borderRadius: 6, padding: '6px 8px', cursor: 'pointer' }}>Switch role</button>
+          {role === 'commander' && <button className="ops-button is-small is-quiet" onClick={onReset} style={{ justifyContent: 'flex-start' }}>Reset demo</button>}
+          {role === 'commander' && resetMsg && <div role="status" style={{ fontSize: 11.5, color: C.warn, padding: '0 2px' }}>{resetMsg}</div>}
+          <button className="ops-button is-small" onClick={onRole}>Switch role</button>
         </div>
       </aside>
-      <main className="ops-main">
-        {children}
-      </main>
+      <div className="ops-main-wrap">
+        <header className="ops-topbar">
+          <div className="ops-crumbs">
+            <span>{ROLE_LABEL[role] || role}</span>
+            <span aria-hidden="true">/</span>
+            <b>{activeLabel}</b>
+          </div>
+          <div className="ops-topbar-status">
+            <span className="ops-link-status" title={connectionStatus?.url || ''}>
+              <span className={`ops-link-dot${linkState}`} aria-hidden="true" />
+              {responseLabel}{connectionStatus?.at ? ` · ${new Date(connectionStatus.at).toLocaleTimeString()}` : ''}
+            </span>
+            <span className="ops-zulu" title="Coordinated Universal Time">{zuluTime(now)}</span>
+          </div>
+        </header>
+        <main className="ops-main">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
@@ -89,14 +119,17 @@ export function Shell({ role, onRole, view, setView, onOpenAircraft, children, o
 export function FleetBanner({ fleet }) {
   if (!fleet) return null;
   return (
-    <div className="ops-card" style={{ padding: 18, marginBottom: 16, borderLeft: '4px solid #d8a93d' }}>
+    <div className="ops-card ops-callout" style={{ '--callout': C.hud, marginBottom: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div>
           <div className="ops-label">Fleet availability — north-star metric</div>
-          <div style={{ fontSize: 40, fontWeight: 800 }}>{fleet.availability_pct}% <span style={{ fontSize: 13, color: '#8b94a3', fontWeight: 400 }}>{fleet.available}/{fleet.total} available · {fleet.maintenance} in maintenance · {fleet.high_risk} high-risk</span></div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', marginTop: 6 }}>
+            <span style={{ fontFamily: 'var(--font-display)', fontSize: 52, fontWeight: 700, lineHeight: 0.9, color: C.hud }}>{fleet.availability_pct}%</span>
+            <span style={{ fontSize: 13, color: C.muted }}>{fleet.available}/{fleet.total} available · {fleet.maintenance} in maintenance · {fleet.high_risk} high-risk</span>
+          </div>
         </div>
-        <div style={{ fontSize: 12, color: '#8b94a3', maxWidth: 300 }}>
-          Objective: <b style={{ color: '#e6e9ee' }}>maximize aircraft availability</b> — convert predictive intelligence into operational decisions.
+        <div style={{ fontSize: 12.5, color: C.muted, maxWidth: 300 }}>
+          Objective: <b style={{ color: C.text }}>maximize aircraft availability</b>. Turn predictive intelligence into operational decisions.
         </div>
       </div>
     </div>

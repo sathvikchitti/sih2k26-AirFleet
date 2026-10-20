@@ -3,10 +3,11 @@ import { api, baseName } from '../../services/api.js';
 import { useFleetViews } from '../../services/hooks.js';
 import {
   ActionButton, Badge, DataError, Empty, KpiCard, Loading, PageHeader, SectionTitle,
-  Select, StatusMsg, Table,
+  Select, StatusMsg, Table, statusColor, MiniMeter,
 } from '../../components/ui.jsx';
+import { C } from '../../theme.js';
 
-const READINESS = (pct) => (pct >= 85 ? '#3fb97f' : pct >= 50 ? '#d8a93d' : '#e05c5c');
+const READINESS = (pct) => (pct >= 85 ? C.ok : pct >= 50 ? C.warn : C.crit);
 
 // Logistics — Bases: the same three bases the commander commands, seen from
 // logistics' side — what each holds, what it owes other bases, and which of
@@ -80,24 +81,24 @@ export default function LogisticsBasesView({ onOpenAircraft, refreshKey, refresh
     { key: 'name', label: 'Base', render: b => <b>{b.name}</b> },
     { key: 'location', label: 'Location' },
     { key: 'aircraftCount', label: 'Aircraft', align: 'right' },
-    { key: 'available', label: 'Available', align: 'right', render: b => <span style={{ color: '#3fb97f', fontWeight: 700 }}>{b.available}</span> },
+    { key: 'available', label: 'Available', align: 'right', render: b => <span style={{ color: C.ok, fontWeight: 700 }}>{b.available}</span> },
     {
       key: 'readiness', label: 'Readiness', align: 'right',
-      render: b => <b style={{ color: b.readiness == null ? '#8b94a3' : READINESS(b.readiness) }}>{b.readiness == null ? '—' : b.readiness + '%'}</b>,
+      render: b => <MiniMeter pct={b.readiness} color={b.readiness == null ? C.muted : READINESS(b.readiness)} />,
     },
     { key: 'stockLines', label: 'Stock Lines', align: 'right' },
     { key: 'units', label: 'Units', align: 'right' },
     {
       key: 'stockouts', label: 'Stockouts', align: 'right',
       render: b => (b.stockouts.length
-        ? <span style={{ color: '#e05c5c', fontWeight: 700 }}>{b.stockouts.length}</span>
-        : <span style={{ color: '#5d6675' }}>0</span>),
+        ? <span style={{ color: C.crit, fontWeight: 700 }}>{b.stockouts.length}</span>
+        : <span style={{ color: C.dim }}>0</span>),
     },
     {
       key: 'blocked', label: 'Grounded For Parts', align: 'right',
       render: b => (b.blocked.length
-        ? <span style={{ color: '#e05c5c', fontWeight: 700 }}>{b.blocked.length}</span>
-        : <span style={{ color: '#5d6675' }}>0</span>),
+        ? <span style={{ color: C.crit, fontWeight: 700 }}>{b.blocked.length}</span>
+        : <span style={{ color: C.dim }}>0</span>),
     },
   ];
 
@@ -116,11 +117,11 @@ export default function LogisticsBasesView({ onOpenAircraft, refreshKey, refresh
         }
       />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12, margin: '14px 0' }}>
+      <div className="ops-kpi-grid">
         <KpiCard label="Bases" value={baseList.length} />
         <KpiCard label="Stock Lines" value={(inventory || []).length} />
-        <KpiCard label="Stockouts" value={(inventory || []).filter(i => i.status === 'STOCKOUT').length} accent="#e05c5c" />
-        <KpiCard label="Grounded For Parts" value={detail.reduce((s, b) => s + b.blocked.length, 0)} accent="#e05c5c" />
+        <KpiCard label="Stockouts" value={(inventory || []).filter(i => i.status === 'STOCKOUT').length} accent={C.crit} />
+        <KpiCard label="Grounded For Parts" value={detail.reduce((s, b) => s + b.blocked.length, 0)} accent={C.crit} />
       </div>
 
       <StatusMsg>{msg}</StatusMsg>
@@ -134,19 +135,19 @@ export default function LogisticsBasesView({ onOpenAircraft, refreshKey, refresh
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(250px,1fr))', gap: 12 }}>
           {opportunities.map(o => (
-            <div key={o.base.id} className="ops-card" style={{ padding: 14, borderLeft: '4px solid #d8a93d' }}>
+            <div key={o.base.id} className="ops-card ops-callout" style={{ '--callout': C.warn, padding: '14px 18px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <b>{o.base.name}</b>
-                <Badge color="#d8a93d">{o.count} could help</Badge>
+                <Badge color={C.warn}>{o.count} could help</Badge>
               </div>
-              <div style={{ fontSize: 12, color: '#8b94a3', marginTop: 6, marginBottom: 8 }}>
+              <div style={{ fontSize: 12, color: C.muted, marginTop: 6, marginBottom: 8 }}>
                 Aircraft elsewhere holding serviceable stock you could send:
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {(o.needy || []).map(a => (
-                  <div key={a.id} style={{ fontSize: 12, color: '#c6ccd6' }}>
+                  <div key={a.id} style={{ fontSize: 12, color: C.text2 }}>
                     <b>{a.id}</b> at {baseName(a.base_id)} needs{' '}
-                    <b style={{ color: '#d8a93d' }}>{a.health?.required_component || a.required_component}</b>
+                    <b style={{ color: C.warn }}>{a.health?.required_component || a.required_component}</b>
                   </div>
                 ))}
               </div>
@@ -167,15 +168,15 @@ export default function LogisticsBasesView({ onOpenAircraft, refreshKey, refresh
             empty="No stock at this base."
             rows={(inventory || []).filter(i => i.base_id === b.id)}
             columns={[
-              { key: 'part_number', label: 'Part', render: i => <b>{i.part_number}</b> },
-              { key: 'name', label: 'Name', render: i => <span style={{ color: '#8b94a3' }}>{nameOf(i.part_number)}</span> },
+              { key: 'part_number', label: 'Part', nowrap: true, render: i => <b className="ops-id">{i.part_number}</b> },
+              { key: 'name', label: 'Name', nowrap: true, render: i => <span style={{ color: C.muted }}>{nameOf(i.part_number)}</span> },
               { key: 'quantity', label: 'Qty', align: 'right' },
               { key: 'reserved', label: 'Reserved', align: 'right', render: i => (i.reserved || 0) },
               {
                 key: 'free', label: 'Free', align: 'right',
                 render: i => {
                   const free = i.quantity - (i.reserved || 0);
-                  return <b style={{ color: free <= 0 ? '#e05c5c' : free === 1 ? '#d8a93d' : '#3fb97f' }}>{free}</b>;
+                  return <b style={{ color: free <= 0 ? C.crit : free === 1 ? C.warn : C.ok }}>{free}</b>;
                 },
               },
               {
@@ -183,7 +184,7 @@ export default function LogisticsBasesView({ onOpenAircraft, refreshKey, refresh
                 render: i => {
                   const min = minOf(i.part_number);
                   const ok = i.quantity > 0 && (min == null || i.condition_pct >= min);
-                  return <span style={{ color: i.quantity === 0 ? '#5d6675' : ok ? '#c6ccd6' : '#e05c5c' }}>
+                  return <span style={{ color: i.quantity === 0 ? C.dim : ok ? C.text2 : C.crit }}>
                     {i.quantity === 0 ? '—' : i.condition_pct + '%'}
                   </span>;
                 },
@@ -191,7 +192,7 @@ export default function LogisticsBasesView({ onOpenAircraft, refreshKey, refresh
               {
                 key: 'status', label: 'Status',
                 render: i => (
-                  <Badge color={i.status === 'STOCKOUT' ? '#e05c5c' : i.status === 'LOW_STOCK' ? '#d8a93d' : '#3fb97f'}>
+                  <Badge color={statusColor(i.status)}>
                     {String(i.status).replace(/_/g, ' ')}
                   </Badge>
                 ),
@@ -206,10 +207,10 @@ export default function LogisticsBasesView({ onOpenAircraft, refreshKey, refresh
           <SectionTitle>Aircraft grounded for want of a part</SectionTitle>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {visible.flatMap(b => b.blocked).map(m => (
-              <div key={m.id} className="ops-card" style={{ padding: 12, borderLeft: '4px solid #e05c5c', display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <div key={m.id} className="ops-card ops-callout" style={{ '--callout': C.crit, padding: '14px 18px', display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
                 <div style={{ fontSize: 13 }}>
                   <b>{m.aircraft_id}</b> at {baseName((aircraft || []).find(a => a.id === m.aircraft_id)?.base_id)} —{' '}
-                  waiting on <b style={{ color: '#d8a93d' }}>{m.component}</b> ({m.id}, {String(m.status).replace(/_/g, ' ').toLowerCase()})
+                  waiting on <b style={{ color: C.warn }}>{m.component}</b> ({m.id}, {String(m.status).replace(/_/g, ' ').toLowerCase()})
                 </div>
                 <ActionButton small onClick={() => onOpenAircraft(m.aircraft_id)}>View Aircraft</ActionButton>
               </div>

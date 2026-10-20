@@ -64,7 +64,9 @@ check_port "$FRONTEND_PORT"
 
 export ML_PROVIDER=fd001
 export DEMO_SCENARIO=fd001_operations
-export DEMO_RESET_ENABLED=true
+[[ "${DEMO_ACCESS_MODE:-local}" == "local" ]] || fail "run_demo.sh is local-only; use the restricted deployment instructions for hosting"
+export DEMO_ACCESS_MODE=local
+export DEMO_RESET_ENABLED="${DEMO_RESET_ENABLED:-false}"
 export DEMO_PERMISSION_MODE=hardened
 export DEMO_BACKEND_PORT="$BACKEND_PORT"
 export DEMO_FRONTEND_PORT="$FRONTEND_PORT"
@@ -84,7 +86,7 @@ FRONTEND_PID=$!
 wait_http "http://127.0.0.1:${FRONTEND_PORT}/" "$FRONTEND_PID" "Vite frontend"
 
 printf 'FD001 operations demo ready: http://localhost:%s/ (API on http://127.0.0.1:%s).\n' "$FRONTEND_PORT" "$BACKEND_PORT"
-printf 'Provider: fd001; scenario: fd001_operations; reset enabled. Press Ctrl+C to stop only launcher-owned processes.\n'
+printf 'Provider: fd001; scenario: fd001_operations; reset=%s. Press Ctrl+C to stop only launcher-owned processes.\n' "$DEMO_RESET_ENABLED"
 printf 'Logs: %s ; %s\n' "$BACKEND_LOG" "$FRONTEND_LOG"
 
 while :; do

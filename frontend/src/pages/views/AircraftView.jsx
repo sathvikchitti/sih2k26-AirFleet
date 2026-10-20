@@ -5,6 +5,7 @@ import {
   Badge, DataError, Empty, HealthBar, KpiCard, Loading, PageHeader, RiskBadge,
   SearchInput, SectionTitle, Select, riskColor, statusColor,
 } from '../../components/ui.jsx';
+import { C } from '../../theme.js';
 
 // Commander — Aircraft: register / inspection view. Card-per-aircraft layout
 // showing health trend-style bars so a commander can eyeball the fleet's
@@ -33,14 +34,14 @@ export default function AircraftView({ onOpenAircraft, refreshKey }) {
         subtitle="Fleet register. Each card shows the aircraft's live health from the ML service, its failure risk and the part it needs next."
       />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12, margin: '14px 0' }}>
+      <div className="ops-kpi-grid">
         <KpiCard label="In Register" value={(aircraft || []).length} />
-        <KpiCard label="Flyable Now" value={(aircraft || []).filter(a => a.status === 'AVAILABLE').length} accent="#3fb97f" />
-        <KpiCard label="High / Critical" value={(aircraft || []).filter(a => ['HIGH', 'CRITICAL'].includes(a.health?.risk_level)).length} accent="#e05c5c" />
-        <KpiCard label="In Maintenance" value={(aircraft || []).filter(a => a.status === 'MAINTENANCE').length} accent="#4f9cf0" />
+        <KpiCard label="Flyable Now" value={(aircraft || []).filter(a => a.status === 'AVAILABLE').length} accent={C.ok} />
+        <KpiCard label="High / Critical" value={(aircraft || []).filter(a => ['HIGH', 'CRITICAL'].includes(a.health?.risk_level)).length} accent={C.crit} />
+        <KpiCard label="In Maintenance" value={(aircraft || []).filter(a => a.status === 'MAINTENANCE').length} accent={C.info} />
       </div>
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+      <div className="ops-toolbar">
         <SearchInput value={q} onChange={setQ} placeholder="Search tail or type…" />
         <Select
           value={status}
@@ -58,16 +59,16 @@ export default function AircraftView({ onOpenAircraft, refreshKey }) {
               <button
                 key={a.id}
                 onClick={() => onOpenAircraft(a.id)}
-                style={{ textAlign: 'left', cursor: 'pointer', background: '#151b24', border: '1px solid #e05c5c55', borderRadius: 10, padding: 14, color: '#e6e9ee' }}
+                className="ops-tile is-alert"
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <b style={{ fontSize: 16 }}>{a.id}</b>
+                <div className="ops-tile-head">
+                  <span className="ops-tile-title">{a.id}</span>
                   <RiskBadge risk={a.health.risk_level} />
                 </div>
-                <div style={{ fontSize: 12, color: '#8b94a3', marginTop: 4 }}>{baseName(a.base_id)} · {a.type}</div>
+                <div className="ops-tile-meta">{baseName(a.base_id)} · {a.type}</div>
                 <div style={{ marginTop: 10 }}><HealthBar score={a.health.health_score} /></div>
-                <div style={{ fontSize: 12, color: '#8b94a3', marginTop: 6 }}>
-                  RUL {rulText(a.health)} · needs <b style={{ color: '#d8a93d' }}>{a.health.required_component || a.required_component || '—'}</b>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>
+                  RUL {rulText(a.health)} · needs <b style={{ color: C.warn }}>{a.health.required_component || a.required_component || '—'}</b>
                 </div>
               </button>
             ))}
@@ -84,13 +85,13 @@ export default function AircraftView({ onOpenAircraft, refreshKey }) {
             <button
               key={a.id}
               onClick={() => onOpenAircraft(a.id)}
-              style={{ textAlign: 'left', cursor: 'pointer', background: '#151b24', border: '1px solid #2a3444', borderRadius: 10, padding: 14, color: '#e6e9ee' }}
+              className="ops-tile"
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <b style={{ fontSize: 16 }}>{a.id}</b>
+              <div className="ops-tile-head">
+                <span className="ops-tile-title">{a.id}</span>
                 <Badge color={statusColor(a.status)}>{String(a.status).replace(/_/g, ' ')}</Badge>
               </div>
-              <div style={{ fontSize: 12, color: '#8b94a3', marginTop: 4 }}>{baseName(a.base_id)} · {a.type}</div>
+              <div className="ops-tile-meta">{baseName(a.base_id)} · {a.type}</div>
               {a.health && (
                 <>
                   <div style={{ marginTop: 10 }}><HealthBar score={a.health.health_score} /></div>

@@ -5,6 +5,7 @@ import {
   Badge, DataError, KpiCard, Loading, PageHeader, RiskBadge, SearchInput,
   Select, Table, riskColor, statusColor,
 } from '../../components/ui.jsx';
+import { C } from '../../theme.js';
 
 // Base manager — Aircraft: the base's own airframes, with a filterable table
 // and the health figures that decide whether each one flies today.
@@ -27,7 +28,7 @@ export default function BaseAircraftView({ homeBase, onOpenAircraft, refreshKey 
   (aircraft || []).forEach(a => { if (a.maintenance) mxById[a.id] = a.maintenance; });
 
   const cols = [
-    { key: 'id', label: 'Tail', render: a => <b style={{ fontSize: 14 }}>{a.id}</b> },
+    { key: 'id', label: 'Tail', render: a => <b className="ops-id" style={{ fontSize: 14 }}>{a.id}</b> },
     { key: 'type', label: 'Type' },
     {
       key: 'status', label: 'Status',
@@ -63,14 +64,14 @@ export default function BaseAircraftView({ homeBase, onOpenAircraft, refreshKey 
         subtitle={`Airframes based at ${baseName(homeBase)}. Health figures are read from the ML service — nothing here is entered by hand.`}
       />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12, margin: '14px 0' }}>
+      <div className="ops-kpi-grid">
         <KpiCard label="Aircraft At Base" value={(aircraft || []).filter(a => a.base_id === homeBase).length} />
-        <KpiCard label="Flyable" value={(aircraft || []).filter(a => a.base_id === homeBase && a.status === 'AVAILABLE').length} accent="#3fb97f" />
-        <KpiCard label="Degraded / At Risk" value={(aircraft || []).filter(a => a.base_id === homeBase && ['AT_RISK', 'DEGRADED'].includes(a.status)).length} accent="#e05c5c" />
-        <KpiCard label="In Maintenance" value={(aircraft || []).filter(a => a.base_id === homeBase && a.status === 'MAINTENANCE').length} accent="#4f9cf0" />
+        <KpiCard label="Flyable" value={(aircraft || []).filter(a => a.base_id === homeBase && a.status === 'AVAILABLE').length} accent={C.ok} />
+        <KpiCard label="Degraded / At Risk" value={(aircraft || []).filter(a => a.base_id === homeBase && ['AT_RISK', 'DEGRADED'].includes(a.status)).length} accent={C.crit} />
+        <KpiCard label="In Maintenance" value={(aircraft || []).filter(a => a.base_id === homeBase && a.status === 'MAINTENANCE').length} accent={C.info} />
       </div>
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+      <div className="ops-toolbar">
         <SearchInput value={q} onChange={setQ} placeholder="Search tail or type…" />
         <Select
           value={status}
@@ -87,7 +88,7 @@ export default function BaseAircraftView({ homeBase, onOpenAircraft, refreshKey 
         onRowClick={a => onOpenAircraft(a.id)}
         empty={q || status ? 'No aircraft match these filters.' : 'No aircraft at this base.'}
       />
-      <div style={{ fontSize: 12, color: '#5d6675', marginTop: 8 }}>
+      <div className="ops-note" style={{ marginTop: 10 }}>
         Click a row for the full record, trend and recommended sourcing.
       </div>
     </div>

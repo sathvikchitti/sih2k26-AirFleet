@@ -3,8 +3,9 @@ import { api, baseName, distanceBetween, etaBetween } from '../../services/api.j
 import { useFleetViews } from '../../services/hooks.js';
 import {
   ActionButton, Badge, DataError, Empty, KpiCard, Loading, PageHeader, SectionTitle,
-  Select, StatusMsg, Table, inputStyle,
+  Select, StatusMsg, Table, inputStyle, statusColor,
 } from '../../components/ui.jsx';
+import { C } from '../../theme.js';
 
 // Base manager — Resources: what this base holds, what its aircraft are
 // waiting on, and the ability to raise a transfer request to logistics.
@@ -58,7 +59,7 @@ export default function BaseResourcesView({ homeBase, refreshKey, refresh }) {
   };
 
   const cols = [
-    { key: 'part_number', label: 'Part', render: i => <b>{i.part_number}</b> },
+    { key: 'part_number', label: 'Part', nowrap: true, render: i => <b className="ops-id">{i.part_number}</b> },
     { key: 'name', label: 'Name', render: i => (partList.find(p => p.part_number === i.part_number) || {}).name || '—' },
     {
       key: 'quantity', label: 'Qty', align: 'right',
@@ -69,7 +70,7 @@ export default function BaseResourcesView({ homeBase, refreshKey, refresh }) {
       key: 'free', label: 'Free', align: 'right',
       render: i => {
         const free = i.quantity - (i.reserved || 0);
-        return <b style={{ color: free <= 0 ? '#e05c5c' : free === 1 ? '#d8a93d' : '#3fb97f' }}>{free}</b>;
+        return <b style={{ color: free <= 0 ? C.crit : free === 1 ? C.warn : C.ok }}>{free}</b>;
       },
     },
     {
@@ -78,7 +79,7 @@ export default function BaseResourcesView({ homeBase, refreshKey, refresh }) {
         const min = (partList.find(p => p.part_number === i.part_number) || {}).min_condition_pct;
         const ok = min != null && i.quantity > 0 && i.condition_pct >= min;
         return (
-          <span style={{ color: !ok && i.quantity > 0 ? '#e05c5c' : '#c6ccd6' }}>
+          <span style={{ color: !ok && i.quantity > 0 ? C.crit : C.text2 }}>
             {i.quantity === 0 ? '—' : i.condition_pct + '%'}
             {ok ? '' : min != null && i.quantity > 0 ? ` (min ${min}%)` : ''}
           </span>
@@ -88,7 +89,7 @@ export default function BaseResourcesView({ homeBase, refreshKey, refresh }) {
     {
       key: 'status', label: 'Status',
       render: i => (
-        <Badge color={i.status === 'STOCKOUT' ? '#e05c5c' : i.status === 'LOW_STOCK' ? '#d8a93d' : '#3fb97f'}>
+        <Badge color={statusColor(i.status)}>
           {String(i.status).replace(/_/g, ' ')}
         </Badge>
       ),
@@ -105,15 +106,15 @@ export default function BaseResourcesView({ homeBase, refreshKey, refresh }) {
         subtitle={`Component stock held at ${baseName(homeBase)}, the aircraft here that depend on it, and a way to request what you are short of.`}
       />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12, margin: '14px 0' }}>
+      <div className="ops-kpi-grid">
         <KpiCard label="Stock Lines" value={mine.length} />
         <KpiCard
           label="Units Free"
           value={mine.reduce((s, i) => s + (i.quantity - (i.reserved || 0)), 0)}
           sub={mine.reduce((s, i) => s + (i.reserved || 0), 0) + ' reserved'}
         />
-        <KpiCard label="Stockouts" value={mine.filter(i => i.status === 'STOCKOUT').length} accent="#e05c5c" />
-        <KpiCard label="Inbound Transfers" value={inbound.filter(t => t.status !== 'RECEIVED').length} accent="#4f9cf0" />
+        <KpiCard label="Stockouts" value={mine.filter(i => i.status === 'STOCKOUT').length} accent={C.crit} />
+        <KpiCard label="Inbound Transfers" value={inbound.filter(t => t.status !== 'RECEIVED').length} accent={C.info} />
       </div>
 
       <SectionTitle>Stock at {baseName(homeBase)}</SectionTitle>
@@ -125,16 +126,16 @@ export default function BaseResourcesView({ homeBase, refreshKey, refresh }) {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 12 }}>
           {shortages.map(s => (
-            <div key={s.part_number} className="ops-card" style={{ padding: 14, borderLeft: '4px solid ' + (s.short ? '#e05c5c' : '#3fb97f') }}>
+            <div key={s.part_number} className="ops-card ops-callout" style={{ '--callout': (s.short ? C.crit : C.ok), padding: '14px 18px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <b>{s.part_number}</b>
-                <Badge color={s.short ? '#e05c5c' : '#3fb97f'}>{s.short ? 'SHORT ' + s.short : 'COVERED'}</Badge>
+                <Badge color={s.short ? C.crit : C.ok}>{s.short ? 'SHORT ' + s.short : 'COVERED'}</Badge>
               </div>
-              <div style={{ fontSize: 12, color: '#8b94a3', marginTop: 4 }}>{s.name}</div>
+              <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{s.name}</div>
               <div style={{ fontSize: 12, marginTop: 8 }}>
                 {s.need} aircraft need it · <b>{s.free}</b> free locally
               </div>
-              <div style={{ fontSize: 11, color: '#8b94a3', marginTop: 4 }}>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>
                 Aircraft: {s.need ? demandFor(s.part_number).map(a => a.id).join(', ') : '—'}
               </div>
             </div>
@@ -173,7 +174,7 @@ export default function BaseResourcesView({ homeBase, refreshKey, refresh }) {
           />
         </div>
         {req.part_number && req.source_base && (
-          <div style={{ fontSize: 12, color: '#8b94a3' }}>
+          <div style={{ fontSize: 12, color: C.muted }}>
             ETA {etaBetween(req.source_base, homeBase)}h · {distanceBetween(req.source_base, homeBase)} km
           </div>
         )}
@@ -188,10 +189,10 @@ export default function BaseResourcesView({ homeBase, refreshKey, refresh }) {
         rows={[...inbound.map(t => ({ ...t, dir: 'IN' })), ...outbound.map(t => ({ ...t, dir: 'OUT' }))]}
         columns={[
           { key: 'id', label: 'ID' },
-          { key: 'dir', label: 'Direction', render: t => <Badge color={t.dir === 'IN' ? '#3fb97f' : '#d8a93d'}>{t.dir === 'IN' ? 'INBOUND' : 'OUTBOUND'}</Badge> },
+          { key: 'dir', label: 'Direction', render: t => <Badge color={t.dir === 'IN' ? C.ok : C.warn}>{t.dir === 'IN' ? 'INBOUND' : 'OUTBOUND'}</Badge> },
           { key: 'part_number', label: 'Part' },
           { key: 'route', label: 'Route', render: t => baseName(t.source_base) + ' → ' + baseName(t.dest_base) },
-          { key: 'status', label: 'Status', render: t => String(t.status).replace(/_/g, ' ') },
+          { key: 'status', label: 'Status', render: t => <Badge color={statusColor(t.status)}>{String(t.status).replace(/_/g, ' ')}</Badge> },
           { key: 'eta_hours', label: 'ETA', align: 'right', render: t => t.eta_hours + ' h' },
         ]}
       />

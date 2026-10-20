@@ -5,6 +5,7 @@ import {
   Badge, DataError, KpiCard, Loading, PageHeader, RiskBadge,
   SearchInput, Select, Table, riskColor, statusColor,
 } from '../../components/ui.jsx';
+import { C } from '../../theme.js';
 
 // Commander — Fleet: every airframe across all bases with its ML health readout,
 // filterable and sortable. Sorted worst-first so the aircraft that can hurt
@@ -46,9 +47,9 @@ export default function FleetView({ onOpenAircraft, refreshKey, focusBase }) {
   const avg = Math.round(list.reduce((s, a) => s + (a.health?.health_score ?? 100), 0) / Math.max(1, list.length));
 
   const cols = [
-    { key: 'id', label: 'Tail', render: a => <b style={{ fontSize: 14 }}>{a.id}</b> },
-    { key: 'type', label: 'Type' },
-    { key: 'base_id', label: 'Base', render: a => baseName(a.base_id) },
+    { key: 'id', label: 'Tail', render: a => <b className="ops-id" style={{ fontSize: 14 }}>{a.id}</b> },
+    { key: 'type', label: 'Type', nowrap: true },
+    { key: 'base_id', label: 'Base', nowrap: true, render: a => baseName(a.base_id) },
     {
       key: 'status', label: 'Status',
       render: a => <Badge color={statusColor(a.status)}>{String(a.status).replace(/_/g, ' ')}</Badge>,
@@ -63,9 +64,9 @@ export default function FleetView({ onOpenAircraft, refreshKey, focusBase }) {
     },
     {
       key: 'risk', label: 'Risk',
-      render: a => (a.health ? <RiskBadge risk={a.health.risk_level} /> : <span style={{ color: '#8b94a3' }}>—</span>),
+      render: a => (a.health ? <RiskBadge risk={a.health.risk_level} /> : <span style={{ color: C.muted }}>—</span>),
     },
-    { key: 'rul', label: 'RUL', align: 'right', render: a => (a.health ? rulText(a.health) : '—') },
+    { key: 'rul', label: 'RUL', align: 'right', nowrap: true, render: a => (a.health ? rulText(a.health) : '—') },
     {
       key: 'fail', label: 'Fail prob', align: 'right',
       render: a => (a.health ? failureProbabilityText(a.health) : '—'),
@@ -87,22 +88,22 @@ export default function FleetView({ onOpenAircraft, refreshKey, focusBase }) {
         subtitle="Every airframe across all bases with its ML health readout. Sorted worst-first by default so the aircraft that can hurt availability are never buried."
       />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12, margin: '14px 0' }}>
+      <div className="ops-kpi-grid">
         <KpiCard label="Total Aircraft" value={list.length} />
         <KpiCard
           label="High / Critical Risk"
           value={list.filter(a => ['HIGH', 'CRITICAL'].includes(a.health?.risk_level)).length}
-          accent="#e05c5c"
+          accent={C.crit}
         />
         <KpiCard
           label="Needs A Part"
           value={list.filter(a => a.health?.required_component || a.required_component).length}
-          accent="#d8a93d"
+          accent={C.warn}
         />
-        <KpiCard label="Average Health" value={avg + '%'} accent="#3fb97f" />
+        <KpiCard label="Average Health" value={avg + '%'} accent={C.ok} />
       </div>
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+      <div className="ops-toolbar">
         <SearchInput value={q} onChange={setQ} placeholder="Search tail, type or part…" />
         <Select
           value={risk}
@@ -134,9 +135,9 @@ export default function FleetView({ onOpenAircraft, refreshKey, focusBase }) {
         onRowClick={a => onOpenAircraft(a.id)}
         empty={q || risk || base ? 'No aircraft match these filters.' : 'No aircraft in fleet.'}
       />
-      <div style={{ fontSize: 12, color: '#5d6675', marginTop: 8 }}>
+      <div className="ops-note" style={{ marginTop: 10 }}>
         Showing {rows.length} of {(aircraft || []).length} aircraft
-        {base ? <> · filtered to <b style={{ color: '#d8a93d' }}>{baseName(base)}</b></> : null}
+        {base ? <> · filtered to <b style={{ color: C.hud }}>{baseName(base)}</b></> : null}
         {' · '}
         Click any row to open the full aircraft record.
       </div>
@@ -144,7 +145,7 @@ export default function FleetView({ onOpenAircraft, refreshKey, focusBase }) {
         <div style={{ marginTop: 8 }}>
           <button
             onClick={() => setBase('')}
-            style={{ background: 'transparent', border: '1px solid #2a3444', color: '#c6ccd6', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12 }}
+            className="ops-button is-small"
           >
             Clear base filter
           </button>

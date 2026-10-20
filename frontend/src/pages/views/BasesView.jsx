@@ -2,8 +2,9 @@ import React from 'react';
 import { baseName, healthScoreText, rulText } from '../../services/api.js';
 import { useFleetViews } from '../../services/hooks.js';
 import {
-  Badge, DataError, KpiCard, Loading, PageHeader, SectionTitle, Table, riskColor, statusColor,
+  Badge, DataError, KpiCard, Loading, MiniMeter, PageHeader, SectionTitle, Table, riskColor, statusColor,
 } from '../../components/ui.jsx';
+import { C } from '../../theme.js';
 
 // Commander — Bases: force-level view of the three bases, their readiness and
 // the aircraft they hold. Clicking a base filters down to its aircraft.
@@ -24,7 +25,7 @@ export default function BasesView({ onOpenAircraft, refreshKey, onOpenBaseAircra
       key: 'available', label: 'Available', align: 'right',
       render: b => {
         const f = fleet.bases.find(x => x.id === b.id);
-        return <span style={{ color: '#3fb97f', fontWeight: 700 }}>{f ? f.available : '—'}</span>;
+        return <span style={{ color: C.ok, fontWeight: 700 }}>{f ? f.available : '—'}</span>;
       },
     },
     {
@@ -33,9 +34,7 @@ export default function BasesView({ onOpenAircraft, refreshKey, onOpenBaseAircra
         const f = fleet.bases.find(x => x.id === b.id);
         const pct = f ? f.availability_pct : null;
         return (
-          <span style={{ color: pct >= 85 ? '#3fb97f' : pct >= 50 ? '#d8a93d' : '#e05c5c', fontWeight: 800 }}>
-            {pct != null ? pct + '%' : '—'}
-          </span>
+          <MiniMeter pct={pct} color={pct >= 85 ? C.ok : pct >= 50 ? C.warn : C.crit} />
         );
       },
     },
@@ -43,14 +42,14 @@ export default function BasesView({ onOpenAircraft, refreshKey, onOpenBaseAircra
       key: 'at_risk', label: 'At Risk', align: 'right',
       render: b => {
         const f = fleet.bases.find(x => x.id === b.id);
-        return <span style={{ color: '#e05c5c' }}>{f ? f.at_risk : '—'}</span>;
+        return <span style={{ color: C.crit }}>{f ? f.at_risk : '—'}</span>;
       },
     },
     {
       key: 'maintenance', label: 'In Mx', align: 'right',
       render: b => {
         const f = fleet.bases.find(x => x.id === b.id);
-        return <span style={{ color: '#4f9cf0' }}>{f ? f.maintenance : '—'}</span>;
+        return <span style={{ color: C.info }}>{f ? f.maintenance : '—'}</span>;
       },
     },
   ];
@@ -62,11 +61,11 @@ export default function BasesView({ onOpenAircraft, refreshKey, onOpenBaseAircra
         subtitle="Force-level readiness. Availability percentage is the share of the base's aircraft currently flyable — the metric the whole system is trying to maximize."
       />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12, margin: '14px 0' }}>
+      <div className="ops-kpi-grid">
         <KpiCard label="Bases" value={bases.length} />
-        <KpiCard label="Fleet Readiness" value={fleet.availability_pct + '%'} accent="#d8a93d" />
-        <KpiCard label="Available" value={fleet.available + ' / ' + fleet.total} accent="#3fb97f" />
-        <KpiCard label="At Risk" value={fleet.at_risk} accent="#e05c5c" />
+        <KpiCard label="Fleet Readiness" value={fleet.availability_pct + '%'} accent={fleet.availability_pct >= 85 ? C.ok : C.warn} />
+        <KpiCard label="Available" value={fleet.available + ' / ' + fleet.total} accent={C.ok} />
+        <KpiCard label="At Risk" value={fleet.at_risk} accent={C.crit} />
       </div>
 
       <SectionTitle>Readiness by base</SectionTitle>
@@ -82,7 +81,7 @@ export default function BasesView({ onOpenAircraft, refreshKey, onOpenBaseAircra
                 onOpenBaseAircraft && (
                   <button
                     onClick={() => onOpenBaseAircraft(b.id)}
-                    style={{ background: 'transparent', border: '1px solid #2a3444', color: '#c6ccd6', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12 }}
+                    className="ops-button is-small"
                   >
                     Open {baseName(b.id)} aircraft
                   </button>
@@ -96,13 +95,13 @@ export default function BasesView({ onOpenAircraft, refreshKey, onOpenBaseAircra
                 <button
                   key={a.id}
                   onClick={() => onOpenAircraft(a.id)}
-                  style={{ textAlign: 'left', cursor: 'pointer', background: '#151b24', border: '1px solid #2a3444', borderRadius: 10, padding: 14, color: '#e6e9ee' }}
+                  className="ops-tile"
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <b style={{ fontSize: 15 }}>{a.id}</b>
+                  <div className="ops-tile-head">
+                    <span className="ops-tile-title">{a.id}</span>
                     <Badge color={statusColor(a.status)}>{String(a.status).replace(/_/g, ' ')}</Badge>
                   </div>
-                  <div style={{ fontSize: 12, color: '#8b94a3', marginTop: 4 }}>{a.type}</div>
+                  <div className="ops-tile-meta">{a.type}</div>
                   {a.health && (
                     <div style={{ fontSize: 12, marginTop: 6, color: riskColor(a.health.risk_level) }}>
                       Health <b>{healthScoreText(a.health)}</b> · {a.health.risk_level} · RUL {rulText(a.health)}
@@ -110,7 +109,7 @@ export default function BasesView({ onOpenAircraft, refreshKey, onOpenBaseAircra
                   )}
                 </button>
               ))}
-              {!held.length && <div style={{ color: '#8b94a3', fontSize: 13 }}>No aircraft based here.</div>}
+              {!held.length && <div style={{ color: C.muted, fontSize: 13 }}>No aircraft based here.</div>}
             </div>
           </div>
         );

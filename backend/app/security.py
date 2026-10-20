@@ -1,7 +1,8 @@
 """Demo-mode authorization checks.
 
-Actors are caller-selected role labels in this POC; checks enforce the
-capability matrix for ordinary demo requests but do not authenticate identity.
+In explicit local mode, actors are caller-selected demo labels. Restricted
+access middleware replaces these claims with authenticated account assignments
+before these existing capability/base checks run.
 """
 
 import os

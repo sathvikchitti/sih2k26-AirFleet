@@ -5,6 +5,7 @@ import {
   ActionButton, DataError, Empty, KpiCard, Loading, PageHeader, RiskBadge,
   SectionTitle, StatusMsg, Table,
 } from '../../components/ui.jsx';
+import { C } from '../../theme.js';
 
 // Logistics — Maintenance Resources: the demand side of logistics. Which work
 // orders are blocked on a component, whether any base can cover them, and a
@@ -94,13 +95,13 @@ export default function MaintenanceResourcesView({ onOpenAircraft, refreshKey, r
       ),
     },
     { key: 'base', label: 'Needs At', render: r => baseName(r.home) },
-    { key: 'component', label: 'Component', render: r => <b style={{ color: '#d8a93d' }}>{r.component}</b> },
+    { key: 'component', label: 'Component', render: r => <b style={{ color: C.warn }}>{r.component}</b> },
     { key: 'rul', label: 'RUL', align: 'right', render: r => r.remainingUsefulLife },
     { key: 'priority', label: 'Priority', render: r => r.priority },
     {
       key: 'status', label: 'Blocked Because',
       render: r => (
-        <span style={{ fontSize: 12, color: r.best ? '#d8a93d' : '#e05c5c' }}>
+        <span style={{ fontSize: 12, color: r.best ? C.warn : C.crit }}>
           {r.best ? 'no stock at ' + baseName(r.home) : 'no serviceable stock fleet-wide'}
         </span>
       ),
@@ -108,8 +109,8 @@ export default function MaintenanceResourcesView({ onOpenAircraft, refreshKey, r
     {
       key: 'donor', label: 'Best Donor',
       render: r => (r.best
-        ? <span>{r.best.base} · {r.best.free} free · {r.best.condition_pct}% cond<br /><span style={{ color: '#8b94a3', fontSize: 11 }}>{r.best.distance_km} km · ETA {r.best.eta_hours}h</span></span>
-        : <span style={{ color: '#e05c5c' }}>none available</span>),
+        ? <span>{r.best.base} · {r.best.free} free · {r.best.condition_pct}% cond<br /><span style={{ color: C.muted, fontSize: 11 }}>{r.best.distance_km} km · ETA {r.best.eta_hours}h</span></span>
+        : <span style={{ color: C.crit }}>none available</span>),
     },
     {
       key: 'action', label: 'Action', align: 'right',
@@ -133,12 +134,12 @@ export default function MaintenanceResourcesView({ onOpenAircraft, refreshKey, r
         subtitle="The demand side of logistics: every work order that is waiting on a physical component, and whether any base can actually cover it. Logistics moves parts — it never changes a maintenance decision."
       />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12, margin: '14px 0' }}>
+      <div className="ops-kpi-grid">
         <KpiCard label="Open Work Orders" value={mxList.length} />
-        <KpiCard label="Blocked On A Part" value={blocked.length} accent="#e05c5c" />
-        <KpiCard label="Coverable" value={covered.length} accent="#3fb97f" sub="a donor base has stock" />
-        <KpiCard label="Uncoverable" value={uncoverable.length} accent="#d8a93d" />
-        <KpiCard label="Parts Demanded" value={partsDemanded} accent="#d8a93d" />
+        <KpiCard label="Blocked On A Part" value={blocked.length} accent={C.crit} />
+        <KpiCard label="Coverable" value={covered.length} accent={C.ok} sub="a donor base has stock" />
+        <KpiCard label="Uncoverable" value={uncoverable.length} accent={C.warn} />
+        <KpiCard label="Parts Demanded" value={partsDemanded} accent={C.warn} />
       </div>
 
       <StatusMsg>{msg}</StatusMsg>
@@ -153,13 +154,13 @@ export default function MaintenanceResourcesView({ onOpenAircraft, refreshKey, r
       {uncoverable.length > 0 && (
         <>
           <SectionTitle>Needs external sourcing</SectionTitle>
-          <div className="ops-card" style={{ padding: 14, borderLeft: '4px solid #e05c5c' }}>
+          <div className="ops-card ops-callout" style={{ '--callout': C.crit, padding: '14px 18px' }}>
             <div style={{ fontSize: 13, marginBottom: 8 }}>
               These work orders cannot be cleared by moving stock between bases — every unit in the fleet is either consumed, reserved or below its minimum serviceable condition.
             </div>
             {uncoverable.map(r => (
               <div key={r.id} style={{ fontSize: 13, marginBottom: 6 }}>
-                <b>{r.aircraft_id}</b> at {baseName(r.home)} needs <b style={{ color: '#d8a93d' }}>{r.component}</b> ·{' '}
+                <b>{r.aircraft_id}</b> at {baseName(r.home)} needs <b style={{ color: C.warn }}>{r.component}</b> ·{' '}
                 {r.donors.length
                   ? r.donors.map(d => `${d.base} (${d.free} free @ ${d.condition_pct}%)`).join(' · ')
                   : 'no other base holds this part'}
@@ -196,7 +197,7 @@ export default function MaintenanceResourcesView({ onOpenAircraft, refreshKey, r
           {
             key: 'serviceable', label: 'Serviceable At', align: 'right',
             render: r => (
-              <span style={{ color: r.serviceable ? '#3fb97f' : '#e05c5c', fontWeight: 700 }}>
+              <span style={{ color: r.serviceable ? C.ok : C.crit, fontWeight: 700 }}>
                 {r.serviceable} base{r.serviceable === 1 ? '' : 's'}
               </span>
             ),
@@ -208,7 +209,7 @@ export default function MaintenanceResourcesView({ onOpenAircraft, refreshKey, r
                 <button
                   key={id}
                   onClick={e => { e.stopPropagation(); onOpenAircraft(id); }}
-                  style={{ background: '#151b24', border: '1px solid #2a3444', borderRadius: 6, padding: '2px 7px', marginRight: 4, color: '#e6e9ee', cursor: 'pointer', fontSize: 12 }}
+                  style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 2, padding: '2px 7px', marginRight: 4, color: C.text, cursor: 'pointer', fontSize: 12 }}
                 >
                   {id}
                 </button>
@@ -219,7 +220,7 @@ export default function MaintenanceResourcesView({ onOpenAircraft, refreshKey, r
       />
 
       <SectionTitle>Resource utilisation — components not tied to any open work order</SectionTitle>
-      <div style={{ fontSize: 13, color: '#8b94a3' }}>
+      <div style={{ fontSize: 13, color: C.muted }}>
         {(parts || [])
           .filter(p => !rows.some(r => r.component === p.part_number))
           .map(p => p.part_number + ' (' + p.name + ')')

@@ -3,7 +3,8 @@ param(
     [ValidateRange(1024, 65535)]
     [int]$BackendPort = 8000,
     [ValidateRange(1024, 65535)]
-    [int]$FrontendPort = 5173
+    [int]$FrontendPort = 5173,
+    [switch]$EnableReset
 )
 
 $ErrorActionPreference = 'Stop'
@@ -88,7 +89,11 @@ $apiProxyTarget = "http://127.0.0.1:$BackendPort"
 
 $env:ML_PROVIDER = 'fd001'
 $env:DEMO_SCENARIO = 'fd001_operations'
-$env:DEMO_RESET_ENABLED = 'true'
+if ($env:DEMO_ACCESS_MODE -and $env:DEMO_ACCESS_MODE -ne 'local') {
+    throw 'run_demo.ps1 is local-only. Use the restricted deployment instructions for hosting.'
+}
+$env:DEMO_ACCESS_MODE = 'local'
+$env:DEMO_RESET_ENABLED = if ($EnableReset) { 'true' } else { 'false' }
 $env:DEMO_PERMISSION_MODE = 'hardened'
 $env:DEMO_BACKEND_PORT = "$BackendPort"
 $env:DEMO_FRONTEND_PORT = "$FrontendPort"
@@ -113,7 +118,7 @@ try {
     Wait-ForHttp "http://127.0.0.1:$FrontendPort/" $frontendProcess 'Vite frontend'
 
     Write-Host "FD001 operations demo is ready: http://localhost:$FrontendPort/ (API on http://127.0.0.1:$BackendPort)."
-    Write-Host "Provider: fd001; scenario: fd001_operations; reset enabled. Press Ctrl+C to stop only launcher-owned processes."
+    Write-Host "Provider: fd001; scenario: fd001_operations; reset=$env:DEMO_RESET_ENABLED. Press Ctrl+C to stop only launcher-owned processes."
     Write-Host "Logs: $backendOut ; $backendErr ; $frontendOut ; $frontendErr"
     while ($true) {
         if ($backendProcess.HasExited) { throw "Backend exited. See $backendErr" }

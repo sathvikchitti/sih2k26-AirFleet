@@ -1,6 +1,7 @@
 import React from 'react';
 import { api, baseName } from '../services/api.js';
 import { ActionButton, DataError, Loading, SectionTitle } from './ui.jsx';
+import { C, CAT } from '../theme.js';
 
 const isNumber = value => typeof value === 'number' && Number.isFinite(value);
 const countText = value => isNumber(value) ? value.toLocaleString() : '—';
@@ -8,28 +9,31 @@ const demandText = value => isNumber(value) ? value.toFixed(2) : 'Unavailable';
 export const DEFAULT_FORECAST_HORIZON = 60;
 const QUICK_FORECAST_HORIZONS = [30, 60, 100];
 const inputStyle = {
-  width: 86, background: '#151b24', color: '#e6e9ee', border: '1px solid #2a3444',
-  borderRadius: 6, padding: '5px 8px', fontSize: 12,
+  width: 86, background: C.panel, color: C.text, border: `1px solid ${C.line}`,
+  borderRadius: 2, padding: '5px 8px', fontSize: 12,
 };
 
+// Bullet chart: stock is the bar, expected demand is the marker. When demand
+// runs past stock the gap is hatched in the alarm colour.
 export function DemandStockChart({ componentRow }) {
   const stock = componentRow?.committed_available_for_transfer;
   const demand = componentRow?.expected_demand;
   const hasStock = isNumber(stock);
   const hasDemand = isNumber(demand);
-  const scale = Math.max(hasStock ? stock : 0, hasDemand ? demand : 0, 1);
-  const stockWidth = hasStock ? Math.max(0, Math.min(100, (stock / scale) * 100)) : 0;
-  const demandWidth = hasDemand ? Math.max(0, Math.min(100, (demand / scale) * 100)) : 0;
+  const scale = Math.max(hasStock ? stock : 0, hasDemand ? demand : 0, 1) * 1.15;
+  const pct = v => Math.max(0, Math.min(100, (v / scale) * 100));
+  const stockPct = hasStock ? pct(stock) : 0;
+  const demandPct = hasDemand ? pct(demand) : null;
+  const short = hasDemand && hasStock && demand > stock;
   return (
-    <div style={{ minWidth: 160 }}>
-      <svg viewBox="0 0 100 28" role="img" aria-label={`${componentRow?.component || 'Component'}: transferable stock after existing work-order commitments ${countText(stock)} units; expected demand ${demandText(demand)} units over the forecast horizon`} style={{ display: 'block', width: '100%', height: 38 }}>
-        <rect x="0" y="2" width="100" height="9" rx="3" fill="#0a0e13" stroke="#2a3444" />
-        {hasStock && <rect x="0" y="2" width={stockWidth} height="9" rx="3" fill="#4f9cf0" />}
-        <rect x="0" y="17" width="100" height="9" rx="3" fill="#0a0e13" stroke="#2a3444" />
-        {hasDemand && <rect x="0" y="17" width={demandWidth} height="9" rx="3" fill="#d8a93d" />}
-      </svg>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 10, color: '#8b94a3' }}>
-        <span>Uncommitted transferable stock {countText(stock)}</span><span>Expected demand {demandText(demand)}</span>
+    <div style={{ minWidth: 180 }}>
+      <div className="ops-bullet" role="img" aria-label={`${componentRow?.component || 'Component'}: transferable stock after existing work-order commitments ${countText(stock)} units; expected demand ${demandText(demand)} units over the forecast horizon`}>
+        {hasStock && stock > 0 && <div className="ops-bullet-bar" style={{ width: `${stockPct}%`, background: CAT[1] }} />}
+        {short && <div className="ops-bullet-short" style={{ left: `${stockPct}%`, width: `${demandPct - stockPct}%` }} />}
+        {demandPct != null && <div className="ops-bullet-marker" style={{ left: `${demandPct}%` }} />}
+      </div>
+      <div className="ops-bullet-legend">
+        <span><span className="ops-swatch" style={{ background: CAT[1] }} />Uncommitted transferable stock {countText(stock)}</span><span><span className="ops-swatch is-tick" style={{ background: hasDemand ? C.text : C.dim }} />Expected demand {demandText(demand)}</span>
       </div>
     </div>
   );
@@ -44,7 +48,7 @@ export function ForecastEligibilityNotice({ forecast, horizonCycles }) {
       ? forecast.suggested_horizon_cycles
       : null;
     return (
-      <div role="status" style={{ color: '#8b94a3', fontSize: 13, marginBottom: 10 }}>
+      <div role="status" style={{ color: C.muted, fontSize: 13, marginBottom: 10 }}>
         No eligible cycle predictions overlap this horizon.
         {unavailable != null ? ` ${unavailable} predictions unavailable because provider or uncertainty fields are missing.` : ''}
         {outside != null ? ` ${outside} valid predictions fall outside the selected horizon.` : ''}
@@ -53,7 +57,7 @@ export function ForecastEligibilityNotice({ forecast, horizonCycles }) {
     );
   }
   if (forecast?.forecast_status !== 'available') {
-    return <div role="status" style={{ color: '#8b94a3', fontSize: 13 }}>Forecast status unavailable; demand is not treated as zero.</div>;
+    return <div role="status" style={{ color: C.muted, fontSize: 13 }}>Forecast status unavailable; demand is not treated as zero.</div>;
   }
   return null;
 }
@@ -61,7 +65,7 @@ export function ForecastEligibilityNotice({ forecast, horizonCycles }) {
 export function ForecastHorizonControls({ horizon, onHorizonChange, disabled = false }) {
   return (
     <>
-      <label htmlFor="resource-forecast-horizon" style={{ color: '#8b94a3', fontSize: 11 }}>Horizon · cycles</label>
+      <label htmlFor="resource-forecast-horizon" style={{ color: C.muted, fontSize: 11 }}>Horizon · cycles</label>
       <input
         id="resource-forecast-horizon"
         aria-label="Forecast horizon in cycles"
@@ -82,9 +86,9 @@ export function ForecastHorizonControls({ horizon, onHorizonChange, disabled = f
             disabled={disabled}
             onClick={() => onHorizonChange(String(cycles))}
             style={{
-              background: Number(horizon) === cycles ? '#3a3020' : '#151b24',
-              color: Number(horizon) === cycles ? '#f0c35a' : '#c6ccd6',
-              border: '1px solid #2a3444', borderRadius: 6, padding: '5px 7px',
+              background: Number(horizon) === cycles ? C.panel2 : C.panel,
+              color: Number(horizon) === cycles ? C.warn : C.text2,
+              border: `1px solid ${C.line}`, borderRadius: 2, padding: '5px 7px',
               cursor: disabled ? 'not-allowed' : 'pointer', fontSize: 10,
             }}
           >{cycles}</button>
@@ -100,14 +104,14 @@ export function SuggestedMoveRow({ move, row, canRequestMove, busy = false, pend
   const disabled = !canRequestMove || !feasible || busy;
   const key = `${row.base_id}:${row.component}:${move?.source_base}:${move?.destination_base}`;
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8, borderTop: '1px solid #2a3444', paddingTop: 6, fontSize: 11 }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8, borderTop: `1px solid ${C.line}`, paddingTop: 6, fontSize: 11 }}>
       <span>{baseName(move?.source_base)} → {baseName(move?.destination_base)} · {validQuantity ? `${move.quantity} unit${move.quantity === 1 ? '' : 's'}` : 'quantity unavailable'} · ETA {isNumber(move?.eta_hours) ? `${move.eta_hours}h` : '—'}{isNumber(move?.condition_pct) ? ` · condition ${move.condition_pct}%` : ''}</span>
       <button
         type="button"
         disabled={disabled}
         title={!canRequestMove ? 'Transfer requests are available in the Logistics demo role.' : !feasible ? 'This move is not marked feasible by the backend.' : undefined}
         onClick={() => onRequest?.(move, row)}
-        style={{ background: '#1c2431', border: '1px solid #2a3444', color: canRequestMove && feasible ? '#e6e9ee' : '#8b94a3', borderRadius: 6, padding: '4px 9px', cursor: !disabled ? 'pointer' : 'not-allowed', fontSize: 11, opacity: !disabled ? 1 : 0.65 }}
+        style={{ background: C.panel2, border: `1px solid ${C.line}`, color: canRequestMove && feasible ? C.text : C.muted, borderRadius: 2, padding: '4px 9px', cursor: !disabled ? 'pointer' : 'not-allowed', fontSize: 11, opacity: !disabled ? 1 : 0.65 }}
       >
         {pending ? 'Creating…' : canRequestMove ? 'Create transfer' : 'Logistics role required'}
       </button>
@@ -185,14 +189,14 @@ export default function ResourceForecastPanel({ canRequestMove = false, refreshK
         Component demand forecast
       </SectionTitle>
       <div className="ops-card" style={{ padding: 14 }}>
-            <div style={{ fontSize: 12, color: '#8b94a3', marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>
           Cycle-based demand uses an assumed demo engine-to-component mapping. The normal-approximation method is indicative and uncalibrated; it is not a component diagnosis or failure probability.
         </div>
         {loading && !forecast ? <Loading>Loading cycle-based demand forecast…</Loading> : null}
         {error ? <DataError error={error}>Forecast unavailable. No fallback demand values are shown.</DataError> : null}
         {forecast && (
           <>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', fontSize: 11, color: '#8b94a3', marginBottom: 10 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', fontSize: 11, color: C.muted, marginBottom: 10 }}>
               <span>{forecast.horizon_cycles ?? '—'}-cycle horizon</span>
               <span>· {forecast.provider || 'Provider unavailable'}{forecast.model_version ? ` · ${forecast.model_version}` : ''}</span>
               <span>· {forecast.eligible_prediction_count ?? '—'} eligible</span>
@@ -200,10 +204,10 @@ export default function ResourceForecastPanel({ canRequestMove = false, refreshK
               <span>· {forecast.outside_horizon_prediction_count ?? '—'} outside horizon</span>
               <span>· {forecast.unmapped_prediction_count ?? '—'} unmapped</span>
               <span>· {forecast.excluded_open_work_order_count ?? '—'} excluded by active work orders</span>
-              {forecast.mutated_state === false ? <span>· Read-only forecast</span> : <span style={{ color: '#e05c5c' }}>· Read-only status not confirmed</span>}
+              {forecast.mutated_state === false ? <span>· Read-only forecast</span> : <span style={{ color: C.crit }}>· Read-only status not confirmed</span>}
             </div>
-            <details style={{ fontSize: 11, color: '#8b94a3', marginBottom: 10 }}>
-              <summary style={{ cursor: 'pointer', color: '#d8a93d' }}>{forecast.mapping?.label || 'Assumed engine-to-component mapping'} · forecast assumptions</summary>
+            <details style={{ fontSize: 11, color: C.muted, marginBottom: 10 }}>
+              <summary style={{ cursor: 'pointer', color: C.warn }}>{forecast.mapping?.label || 'Assumed engine-to-component mapping'} · forecast assumptions</summary>
               {forecast.mapping?.source ? <div style={{ marginTop: 6 }}>Mapping source: {forecast.mapping.source}</div> : null}
               {forecast.mapping?.engine_to_component && Object.keys(forecast.mapping.engine_to_component).length > 0 ? (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 5 }}>
@@ -219,21 +223,21 @@ export default function ResourceForecastPanel({ canRequestMove = false, refreshK
                 {rows.map((row, index) => {
                   const moves = row.demand_status === 'available' && Array.isArray(row.suggested_moves) ? row.suggested_moves : [];
                   return (
-                    <div key={`${row.base_id}:${row.component}:${index}`} className="ops-card" style={{ padding: 10, borderColor: '#2a3444' }}>
+                    <div key={`${row.base_id}:${row.component}:${index}`} className="ops-card" style={{ padding: 10, borderColor: C.line }}>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
                         <div style={{ flex: '1 1 120px', fontSize: 12 }}>
-                          <b>{row.component || 'Component unavailable'}</b>{row.part_name ? <div style={{ color: '#8b94a3', fontSize: 10 }}>{row.part_name}</div> : null}
-                          <div style={{ color: '#8b94a3', marginTop: 3 }}>{row.base_name || baseName(row.base_id)}</div>
-                          <div style={{ color: '#8b94a3', fontSize: 10, marginTop: 3 }}>{countText(row.eligible_aircraft_count)} eligible · {countText(row.unavailable_aircraft_count)} unavailable · {countText(row.outside_horizon_aircraft_count)} outside horizon</div>
+                          <b>{row.component || 'Component unavailable'}</b>{row.part_name ? <div style={{ color: C.muted, fontSize: 10 }}>{row.part_name}</div> : null}
+                          <div style={{ color: C.muted, marginTop: 3 }}>{row.base_name || baseName(row.base_id)}</div>
+                          <div style={{ color: C.muted, fontSize: 10, marginTop: 3 }}>{countText(row.eligible_aircraft_count)} eligible · {countText(row.unavailable_aircraft_count)} unavailable · {countText(row.outside_horizon_aircraft_count)} outside horizon</div>
                         </div>
                         <div style={{ flex: '2 1 180px' }}><DemandStockChart componentRow={row} /></div>
-                        <div style={{ flex: '1 1 130px', fontSize: 11, color: '#8b94a3' }}>
+                        <div style={{ flex: '1 1 130px', fontSize: 11, color: C.muted }}>
                           <div>On hand {countText(row.on_hand)} · reserved {countText(row.reserved)}</div>
                           <div>Minimum reserve {countText(row.minimum_reserve)}</div>
                           <div>Unbound inbound {countText(row.inbound_pending_or_in_transit)} · only this offsets forecast shortfall</div>
                           {isNumber(row.inbound_work_order_committed) && row.inbound_work_order_committed > 0 ? <div>WO-committed inbound {countText(row.inbound_work_order_committed)} · dedicated</div> : null}
                           {isNumber(row.inbound_proposed_for_open_work_orders) && row.inbound_proposed_for_open_work_orders > 0 ? <div>Proposed for open WOs {countText(row.inbound_proposed_for_open_work_orders)} · dedicated</div> : null}
-                          <div style={{ color: isNumber(row.projected_shortfall) && row.projected_shortfall > 0 ? '#d8a93d' : '#8b94a3', marginTop: 3 }}>
+                          <div style={{ color: isNumber(row.projected_shortfall) && row.projected_shortfall > 0 ? C.warn : C.muted, marginTop: 3 }}>
                             {isNumber(row.projected_shortfall) ? `Whole units needed (rounded up): ${row.projected_shortfall}` : 'Shortfall unavailable'}
                           </div>
                         </div>
@@ -249,10 +253,10 @@ export default function ResourceForecastPanel({ canRequestMove = false, refreshK
                 })}
               </div>
             )}
-            {!rows.length && forecast.forecast_status === 'available' ? <div style={{ color: '#8b94a3', fontSize: 13 }}>No component demand rows were returned for this horizon.</div> : null}
+            {!rows.length && forecast.forecast_status === 'available' ? <div style={{ color: C.muted, fontSize: 13 }}>No component demand rows were returned for this horizon.</div> : null}
           </>
         )}
-        {message ? <div role="status" style={{ color: messageError ? '#e05c5c' : '#d8a93d', fontSize: 12, marginTop: 10 }}>{message}</div> : null}
+        {message ? <div role="status" style={{ color: messageError ? C.crit : C.warn, fontSize: 12, marginTop: 10 }}>{message}</div> : null}
       </div>
     </section>
   );

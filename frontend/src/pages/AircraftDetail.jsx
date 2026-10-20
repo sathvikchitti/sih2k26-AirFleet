@@ -1,9 +1,10 @@
 import React from 'react';
 import { api, baseName, distanceText, etaText, failureProbabilityText, healthScoreText, rulText } from '../services/api.js';
-import { Badge, HealthBar, HealthChart, SectionTitle, riskColor, statusColor } from '../components/ui.jsx';
+import { ActionButton, Badge, HealthBar, HealthChart, Loading, SectionTitle, StatusMsg, riskColor, statusColor } from '../components/ui.jsx';
 import MaintenanceCasePanel from '../components/MaintenanceCasePanel.jsx';
 import { Fd001ArtifactEvidence, RulEnvelope, RulHistoryChart, TopSensorDrivers } from '../components/PredictionEvidence.jsx';
 import RiskPolicyNote from '../components/RiskPolicyNote.jsx';
+import { C } from '../theme.js';
 
 // Closed loop: WAITING → IN TRANSIT → RECEIVED → READY → IN_PROGRESS → AVAILABLE
 export default function AircraftDetail({ id, role, homeBase, onBack, refresh, refreshKey }) {
@@ -69,8 +70,8 @@ export default function AircraftDetail({ id, role, homeBase, onBack, refresh, re
     return () => { active = false; };
   }, [id, d?.base_id, workOrderComponent, needsWorkOrderStock, refreshKey]);
 
-  if (!d && loadError) return <div style={{ color: '#e05c5c' }}>Could not load {id}: {loadError}</div>;
-  if (!d) return <div style={{ color: '#8b94a3' }}>Loading {id}…</div>;
+  if (!d && loadError) return <div style={{ color: C.crit }}>Could not load {id}: {loadError}</div>;
+  if (!d) return <Loading>Loading {id}…</Loading>;
   const h = d.health || {};
   const fallbackPrediction = h.model_version === 'demo-fallback';
   const rec = d.recommendation;
@@ -99,20 +100,24 @@ export default function AircraftDetail({ id, role, homeBase, onBack, refresh, re
 
   return (
     <div>
-      <button onClick={onBack} style={{ background: 'transparent', border: 'none', color: '#8b94a3', cursor: 'pointer', fontSize: 13 }}>← Back</button>
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 6 }}>
-        <h2 style={{ fontSize: 24, fontWeight: 800 }}>{d.id}</h2>
-        <Badge color={statusColor(d.status)}>{d.status.replace('_', ' ')}</Badge>
-        {h.risk_level && <Badge color={riskColor(h.risk_level)}>{h.risk_level} RISK</Badge>}
-        <span style={{ fontSize: 12, color: '#8b94a3' }}>{baseName(d.base_id)} · {d.type}</span>
+      <ActionButton small quiet onClick={onBack}>← Back</ActionButton>
+      <div className="ops-page-header" style={{ marginTop: 10 }}>
+        <div>
+          <div className="ops-label">{baseName(d.base_id)} · {d.type}</div>
+          <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 }}>
+            <h2 className="ops-page-title" style={{ fontFamily: 'var(--font-mono)', fontSize: 40, letterSpacing: '.02em' }}>{d.id}</h2>
+            <Badge color={statusColor(d.status)}>{String(d.status).replace(/_/g, ' ')}</Badge>
+            {h.risk_level && <Badge color={riskColor(h.risk_level)}>{h.risk_level} RISK</Badge>}
+          </div>
+        </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 12, marginTop: 14 }}>
-        <div className="ops-card" style={{ padding: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 12, marginTop: 20 }}>
+        <div className="ops-card" style={{ padding: '18px 20px' }}>
           <div className="ops-label">{h.health_score_derived ? 'Health indicator derived from RUL' : 'Health prediction'} · {fallbackPrediction ? 'offline fallback' : 'aircraft detail API snapshot'}</div>
-          <div style={{ fontSize: 34, fontWeight: 800, color: riskColor(h.risk_level) }}>{healthScoreText(h)} <span style={{ fontSize: 13, color: '#8b94a3', fontWeight: 400 }}>health</span></div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, margin: '12px 0 10px' }}><span style={{ fontFamily: 'var(--font-display)', fontSize: 64, fontWeight: 700, lineHeight: .9, color: riskColor(h.risk_level) }}>{healthScoreText(h)}</span><span style={{ fontSize: 13, color: C.muted }}>health</span></div>
           {h.health_score != null && <HealthBar score={h.health_score} />}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12, fontSize: 13 }}>
+          <div className="ops-kv">
             <div>Failure probability<br /><b>{failureProbabilityText(h)}</b></div>
             <div>Remaining useful life<br /><b>{rulText(h)}</b></div>
             <div>Uncalibrated model spread<br /><b><RulEnvelope prediction={h} /></b></div>
@@ -120,10 +125,10 @@ export default function AircraftDetail({ id, role, homeBase, onBack, refresh, re
             <div>Predicted mx<br /><b>{h.predicted_maintenance == null ? 'Unavailable' : h.predicted_maintenance ? 'REQUIRED' : 'Not required'}</b></div>
             <div>Subsystem<br /><b>{h.subsystem || 'Unavailable'}</b></div>
           </div>
-          {h.probability_status === 'unavailable' && <div style={{ marginTop: 6, fontSize: 11, color: '#8b94a3' }}>Risk band follows the backend health-only policy; it is not a calibrated failure probability.</div>}
+          {h.probability_status === 'unavailable' && <div style={{ marginTop: 6, fontSize: 11, color: C.muted }}>Risk band follows the backend health-only policy; it is not a calibrated failure probability.</div>}
           <RiskPolicyNote refreshKey={refreshKey} />
           {(h.model_version || h.prediction_timestamp || metadata.prediction_timestamp || h.prediction_horizon_hours != null || h.is_synthetic || h.history_source || h.source || h.provider || fallbackPrediction) && (
-            <div style={{ marginTop: 10, fontSize: 11, color: '#8b94a3' }}>
+            <div style={{ marginTop: 10, fontSize: 11, color: C.muted }}>
               {fallbackPrediction ? 'OFFLINE DEMO FALLBACK · illustrative prediction, not live' : h.model_version ? <>Model {h.model_version}</> : 'Prediction provenance unavailable'}
               {h.provider ? <> · Provider {h.provider}</> : null}
               {h.source ? <> · Source {h.source}</> : null}
@@ -134,18 +139,18 @@ export default function AircraftDetail({ id, role, homeBase, onBack, refresh, re
               {metadata.observation_cycle_count != null ? <> · {metadata.observation_cycle_count} observed cycles</> : null}
               {syntheticEngineHistory ? <> · Synthetic NASA FD001 history mapped to demo aircraft</> : null}
               {!syntheticEngineHistory && (h.is_synthetic || d.is_synthetic || historySource === 'illustrative') ? <> · Illustrative prediction history</> : null}
-              {predictionStale || h.is_stale ? <> · <b style={{ color: '#e05c5c' }}>Stale prediction</b></> : null}
+              {predictionStale || h.is_stale ? <> · <b style={{ color: C.crit }}>Stale prediction</b></> : null}
             </div>
           )}
           <TopSensorDrivers drivers={h.top_drivers} method={h.driver_method} />
-          <div style={{ marginTop: 10, fontSize: 13 }}>ML required component: <b>{modelComponent || '—'}</b></div>
-          {workOrderComponent && <div style={{ fontSize: 13 }}>Active work-order component: <b>{workOrderComponent}</b>{activeWorkOrder?.component_source === 'human_selected' ? <span style={{ color: '#8b94a3' }}> · selected by operator, not an ML output</span> : activeWorkOrder?.component_source === 'knowledge_rule' ? <span style={{ color: '#8b94a3' }}> · selected by maintenance rule</span> : null}</div>}
-          <div style={{ fontSize: 13 }}>Maintenance priority: <b>{(activeWorkOrder && activeWorkOrder.priority) || d.priority || 'Unavailable'}</b> · Est. recovery <b>{recoveryHours == null ? 'Unavailable' : `${recoveryHours}h`}</b></div>
-          <div style={{ fontSize: 13 }}>Maintenance status: <b>{mxStatus}</b></div>
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${C.line}`, fontSize: 13, lineHeight: 1.7 }}>ML required component: <b>{modelComponent || '—'}</b></div>
+          {workOrderComponent && <div style={{ fontSize: 13, lineHeight: 1.7 }}>Active work-order component: <b>{workOrderComponent}</b>{activeWorkOrder?.component_source === 'human_selected' ? <span style={{ color: C.muted }}> · selected by operator, not an ML output</span> : activeWorkOrder?.component_source === 'knowledge_rule' ? <span style={{ color: C.muted }}> · selected by maintenance rule</span> : null}</div>}
+          <div style={{ fontSize: 13, lineHeight: 1.7 }}>Maintenance priority: <b>{(activeWorkOrder && activeWorkOrder.priority) || d.priority || 'Unavailable'}</b> · Est. recovery <b>{recoveryHours == null ? 'Unavailable' : `${recoveryHours}h`}</b></div>
+          <div style={{ fontSize: 13, lineHeight: 1.7 }}>Maintenance status: <b>{mxStatus}</b></div>
         </div>
-        <div className="ops-card" style={{ padding: 16 }}>
+        <div className="ops-card" style={{ padding: '18px 20px' }}>
           <div className="ops-label">Health trend ({fd001PrefixTrend ? 'FD001 model predictions over synthetic engine history' : trendSource === 'illustrative_mock_curve' ? 'illustrative mock curve' : historySource === 'recorded' ? 'recorded' : 'illustrative'})</div>
-          <div style={{ marginTop: 8 }}><HealthChart trend={d.trend} caption={healthTrendCaption} /></div>
+          <div style={{ marginTop: 12 }}><HealthChart trend={d.trend} caption={healthTrendCaption} /></div>
           <div style={{ marginTop: 12 }}><RulHistoryChart trend={d.rul_trend} /></div>
           {fd001PrefixTrend || h.provider === 'fd001-random-forest' || String(h.source || '').startsWith('cmapss-fd001') ? (
             <Fd001ArtifactEvidence
@@ -156,50 +161,50 @@ export default function AircraftDetail({ id, role, homeBase, onBack, refresh, re
               error={fd001MetricsError}
             />
           ) : null}
-          <div style={{ fontSize: 11, color: '#5d6675', marginTop: 6 }}>
+          <div style={{ fontSize: 11, color: C.dim, marginTop: 6 }}>
             {fd001PrefixTrend ? 'Retrospective Random Forest predictions over simulated NASA C-MAPSS FD001 test-engine prefixes mapped to this demo aircraft; not real aircraft telemetry.' : trendSource === 'illustrative_mock_curve' || d.is_synthetic || historySource !== 'recorded' ? 'Illustrative degradation trend — not raw sensor data.' : 'Recorded prediction history — not raw sensor data.'}
           </div>
         </div>
       </div>
 
       <SectionTitle>Resource availability — {displayComponent || 'no component selected'}</SectionTitle>
-      <div className="ops-card" style={{ overflow: 'hidden' }}>
-        {!displayComponent ? <div style={{ padding: 12, color: '#8b94a3', fontSize: 12 }}>No model component or active work-order component is selected; there are no component stock locations to display.</div> : <>
-          {needsWorkOrderStock && workOrderStockError ? <div style={{ padding: 12, color: '#e05c5c', fontSize: 12 }}>Stock locations for the work-order component are unavailable. {workOrderStockError.message}</div> : null}
-          {needsWorkOrderStock && !workOrderStock && !workOrderStockError ? <div style={{ padding: 12, color: '#8b94a3', fontSize: 12 }}>Loading stock locations for {workOrderComponent}…</div> : null}
-          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
-            <thead><tr style={{ textAlign: 'left', color: '#8b94a3', fontSize: 11 }}>
-              <th style={{ padding: 10 }}>Base</th><th>Qty</th><th>Condition</th><th>Distance</th><th>ETA</th><th>Status</th>
+      <div className="ops-card ops-table-scroll">
+        {!displayComponent ? <div style={{ padding: 12, color: C.muted, fontSize: 12 }}>No model component or active work-order component is selected; there are no component stock locations to display.</div> : <>
+          {needsWorkOrderStock && workOrderStockError ? <div style={{ padding: 12, color: C.crit, fontSize: 12 }}>Stock locations for the work-order component are unavailable. {workOrderStockError.message}</div> : null}
+          {needsWorkOrderStock && !workOrderStock && !workOrderStockError ? <div style={{ padding: 12, color: C.muted, fontSize: 12 }}>Loading stock locations for {workOrderComponent}…</div> : null}
+          <table className="ops-table" style={{ minWidth: 560 }}>
+            <thead><tr>
+              <th>Base</th><th>Qty</th><th>Condition</th><th>Distance</th><th>ETA</th><th>Status</th>
             </tr></thead>
             <tbody>
               {(resourceRows || []).map((r, i) => (
-                <tr key={i} style={{ borderTop: '1px solid #2a3444' }}>
-                  <td style={{ padding: 10 }}>{baseName(r.base_id)}</td><td>{r.quantity}</td>
-                  <td>{r.condition_pct == null ? '—' : `${r.condition_pct}%`}</td><td>{distanceText(r.distance_km)}</td><td>{etaText(r.eta_hours)}</td><td>{r.status || '—'}</td>
+                <tr key={i} className="ops-table-row">
+                  <td>{baseName(r.base_id)}</td><td className="ops-number">{r.quantity}</td>
+                  <td>{r.condition_pct == null ? '—' : `${r.condition_pct}%`}</td><td>{distanceText(r.distance_km)}</td><td>{etaText(r.eta_hours)}</td><td>{r.status ? <Badge color={statusColor(r.status)}>{String(r.status).replace(/_/g, ' ')}</Badge> : '—'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {resourceRows && resourceRows.length === 0 ? <div style={{ padding: 10, color: '#8b94a3', fontSize: 12 }}>No inventory rows found for {displayComponent}.</div> : null}
+          {resourceRows && resourceRows.length === 0 ? <div style={{ padding: 10, color: C.muted, fontSize: 12 }}>No inventory rows found for {displayComponent}.</div> : null}
         </>}
       </div>
 
       {rec?.recommended && (
         <>
           <SectionTitle>Recommended sourcing</SectionTitle>
-          <div className="ops-card" style={{ padding: 16, borderLeft: '4px solid #d8a93d' }}>
-            <div className="ops-label">Recommended action</div>
-            <div style={{ fontSize: 17, fontWeight: 800, marginTop: 4 }}>Transfer {rec.required_component} from {baseName(rec.recommended.donor_base)} — ETA {rec.recommended.eta_hours}h</div>
-            <ul style={{ fontSize: 13, color: '#c6ccd6', paddingLeft: 18, marginTop: 8 }}>
+          <div className="ops-card ops-callout" style={{ '--callout': C.warn }}>
+            <div className="ops-label" style={{ color: C.warn }}>Recommended action</div>
+            <div className="ops-action-route" style={{ fontSize: 16 }}>Transfer <b>{rec.required_component}</b> from <b>{baseName(rec.recommended.donor_base)}</b><span className="ops-action-eta">ETA {rec.recommended.eta_hours}h</span></div>
+            <ul className="ops-reasons">
               {rec.recommended.reasons.map((r, i) => <li key={i}>{r}</li>)}
             </ul>
-            <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-              <button onClick={() => doAction(() => api.approveRecommendation(d.id), 'Approving transfer')} style={primaryBtn}>Approve Transfer</button>
-              <button onClick={() => doAction(() => api.startMx(d.id), 'Starting maintenance')} style={btn}>Start Maintenance</button>
-              <button onClick={() => doAction(() => api.completeMx(d.id), 'Completing work order; aircraft status will be recomputed')} style={btn}>Complete Work Order</button>
+            <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
+              <ActionButton primary onClick={() => doAction(() => api.approveRecommendation(d.id), 'Approving transfer')}>Approve Transfer</ActionButton>
+              <ActionButton onClick={() => doAction(() => api.startMx(d.id), 'Starting maintenance')}>Start Maintenance</ActionButton>
+              <ActionButton onClick={() => doAction(() => api.completeMx(d.id), 'Completing work order; aircraft status will be recomputed')}>Complete Work Order</ActionButton>
             </div>
-            {msg && <div style={{ marginTop: 8, fontSize: 13, color: '#d8a93d' }}>{msg}</div>}
-            <div style={{ fontSize: 12, color: '#8b94a3', marginTop: 8 }}>
+            <StatusMsg>{msg}</StatusMsg>
+            <div className="ops-note" style={{ marginTop: 12 }}>
               Workflow: approve → IN TRANSIT → (Logistics: simulate arrival → RECEIVED) → start → complete work order; aircraft availability is recomputed from the current classifier and prediction.
             </div>
           </div>
@@ -209,6 +214,3 @@ export default function AircraftDetail({ id, role, homeBase, onBack, refresh, re
     </div>
   );
 }
-
-const btn = { background: '#1c2431', border: '1px solid #2a3444', color: '#e6e9ee', borderRadius: 7, padding: '8px 14px', cursor: 'pointer' };
-const primaryBtn = { background: '#d8a93d', border: 'none', color: '#111', fontWeight: 800, borderRadius: 7, padding: '8px 14px', cursor: 'pointer' };

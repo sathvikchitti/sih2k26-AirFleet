@@ -35,6 +35,7 @@ import BaseManager from '../../src/pages/BaseManager.jsx';
 import Logistics from '../../src/pages/Logistics.jsx';
 import { compareTimeWeightedAvailability } from '../../src/components/ReadinessSimulationPanel.jsx';
 import { RiskPolicyDetails } from '../../src/components/RiskPolicyNote.jsx';
+import Documentation from '../../src/pages/Documentation.jsx';
 
 const noop = () => {};
 const props = { onOpenAircraft: noop, refresh: noop, refreshKey: 0 };
@@ -82,7 +83,7 @@ const rulChartHtml = renderToString(React.createElement(RulHistoryChart, {
 }));
 if (!rulChartHtml.includes('RUL history (cycles)')
   || !rulChartHtml.includes('uncalibrated model spread')
-  || !rulChartHtml.includes('fill="#4f9cf0"')
+  || !rulChartHtml.includes('fill="#7aa6c8"')
   || !rulChartHtml.includes('not a confidence interval')) {
   throw new Error('RUL history chart should show its uncalibrated mean-inclusive tree-spread envelope');
 }
@@ -142,7 +143,7 @@ const noIntervalRulChartHtml = renderToString(React.createElement(RulHistoryChar
 if (!mockRulChartHtml.includes('RUL history unavailable for this provider.')
   || mockRulChartHtml.includes('<svg')
   || !noIntervalRulChartHtml.includes('interval unavailable')
-  || noIntervalRulChartHtml.includes('fill="#4f9cf0"')
+  || noIntervalRulChartHtml.includes('fill="#7aa6c8"')
   || !noIntervalRulChartHtml.includes('52.29')) {
   throw new Error('RUL history chart should preserve point values and represent unavailable bounds without a band');
 }
@@ -230,10 +231,10 @@ if (!readinessHtml.includes('60.0%') || !readinessHtml.includes('15.0 pp')
   || !readinessHtml.includes('NMCS proxy') || !readinessHtml.includes('Down for maintenance')
   || !readinessMissingHtml.includes('—') || readinessMissingHtml.includes('0.0%')
   || !baseReadinessHtml.includes('0.0%') || !baseReadinessHtml.includes('Target 75.0%')
-  || !baseReadinessHtml.includes('fill="#e05c5c"') || !baseReadinessHtml.includes('color:#e05c5c')
-  || !baseReadinessMetHtml.includes('fill="#3fb97f"')
-  || !readinessHtml.includes('color:#d8a93d')
-  || !baseReadinessMissingHtml.includes('color:#8b94a3')
+  || !baseReadinessHtml.includes('fill="#f0524a"') || !baseReadinessHtml.includes('color:#f0524a')
+  || !baseReadinessMetHtml.includes('fill="#8fe388"')
+  || !readinessHtml.includes('color:#f2a33a')
+  || !baseReadinessMissingHtml.includes('color:#878e95')
   || !baseReadinessMissingHtml.includes('Gap unavailable') || !baseReadinessMissingHtml.includes('Target unavailable')
   || baseReadinessMissingHtml.includes('0.0%')) {
   throw new Error('Commander readiness displays should preserve backend metrics, target, real zero, and unavailable values');
@@ -433,6 +434,7 @@ const CASES = [
   ['logistics/transfers', TransfersView, props],
   ['logistics/mxresources', MaintenanceResourcesView, props],
   ['logistics/bases', LogisticsBasesView, props],
+  ['shared/documentation', Documentation, props],
 ];
 
 let failed = 0;

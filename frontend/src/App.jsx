@@ -2,10 +2,12 @@ import React from 'react';
 import RoleSelect from './components/RoleSelect.jsx';
 import { Shell, navFor } from './components/Shell.jsx';
 import { api } from './services/api.js';
+import { C } from './theme.js';
 import Commander from './pages/Commander.jsx';
 import BaseManager from './pages/BaseManager.jsx';
 import Logistics from './pages/Logistics.jsx';
 import AircraftDetail from './pages/AircraftDetail.jsx';
+import Documentation from './pages/Documentation.jsx';
 
 import FleetView from './pages/views/FleetView.jsx';
 import BasesView from './pages/views/BasesView.jsx';
@@ -35,6 +37,7 @@ const VIEWS = {
     maintenance: MaintenanceView,
     resources: ResourcesView,
     recommendations: RecommendationsView,
+    docs: Documentation,
   },
   base: {
     dashboard: BaseManager,
@@ -42,6 +45,7 @@ const VIEWS = {
     aircraft: BaseAircraftView,
     maintenance: BaseMaintenanceView,
     resources: BaseResourcesView,
+    docs: Documentation,
   },
   logistics: {
     dashboard: Logistics,
@@ -50,6 +54,7 @@ const VIEWS = {
     transfers: TransfersView,
     mxresources: MaintenanceResourcesView,
     bases: LogisticsBasesView,
+    docs: Documentation,
   },
 };
 
@@ -61,13 +66,29 @@ export default function App() {
   const [focusBase, setFocusBase] = React.useState('');
   const [refreshKey, setRefreshKey] = React.useState(0);
   const [resetMsg, setResetMsg] = React.useState('');
+  const [docsOpen, setDocsOpen] = React.useState(false);
   const refresh = React.useCallback(() => setRefreshKey(k => k + 1), []);
 
   api.setDemoContext(role, homeBase);
 
+  if (!role && docsOpen) {
+    return (
+      <div className="ops-docs-standalone">
+        <header className="ops-topbar">
+          <div className="ops-crumbs"><span>Fleet readiness</span><span aria-hidden="true">/</span><b>Documentation</b></div>
+          <button className="ops-button is-small" onClick={() => setDocsOpen(false)}>← Choose a role</button>
+        </header>
+        <main className="ops-main" style={{ margin: '0 auto' }}><Documentation /></main>
+      </div>
+    );
+  }
+
   if (!role) {
     return (
-      <RoleSelect onSelect={(r, b) => { setRole(r); setHomeBase(b || 'alpha'); setView('dashboard'); }} />
+      <RoleSelect
+        onSelect={(r, b) => { setRole(r); setHomeBase(b || 'alpha'); setView('dashboard'); }}
+        onDocs={() => setDocsOpen(true)}
+      />
     );
   }
 
@@ -103,7 +124,7 @@ export default function App() {
       role={role}
       view={active}
       setView={(v) => { setView(v); setOpenAircraft(null); }}
-      onRole={() => { setRole(null); setOpenAircraft(null); }}
+      onRole={() => { setRole(null); setOpenAircraft(null); setDocsOpen(false); }}
       onOpenAircraft={goAircraft}
       resetMsg={resetMsg}
       onReset={async () => {
@@ -113,12 +134,13 @@ export default function App() {
       }}
     >
       {role === 'base' && !openAircraft && (
-        <div style={{ marginBottom: 12, fontSize: 12, color: '#8b94a3' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, fontSize: 12.5, color: C.muted }}>
           Home base:{' '}
           <select
+            className="ops-control"
             value={homeBase}
             onChange={e => { setHomeBase(e.target.value); setOpenAircraft(null); }}
-            style={{ background: '#151b24', color: '#e6e9ee', border: '1px solid #2a3444', borderRadius: 6, padding: '4px 8px' }}
+            style={{ minHeight: 30, padding: '4px 30px 4px 9px' }}
           >
             <option value="alpha">Base Alpha</option>
             <option value="bravo">Base Bravo</option>

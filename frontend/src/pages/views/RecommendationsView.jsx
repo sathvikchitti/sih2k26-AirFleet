@@ -5,6 +5,7 @@ import {
   ActionButton, Badge, DataError, Empty, KpiCard, Loading, PageHeader, RiskBadge,
   StatusMsg, riskColor,
 } from '../../components/ui.jsx';
+import { C } from '../../theme.js';
 
 // Commander — Recommendations: every aircraft the ML service has flagged, with
 // a ranked donor analysis for the component it needs. This is where the human
@@ -54,10 +55,10 @@ export default function RecommendationsView({ onOpenAircraft, refreshKey, refres
         subtitle="Advisory only — the system proposes, the commander disposes. Each card ranks candidate donor bases for the component an aircraft needs next."
       />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12, margin: '14px 0' }}>
+      <div className="ops-kpi-grid">
         <KpiCard label="Aircraft Flagged" value={flagged.length} />
-        <KpiCard label="Critical" value={flagged.filter(a => a.health?.risk_level === 'CRITICAL' || a.health?.risk_level === 'HIGH').length} accent="#e05c5c" />
-        <KpiCard label="Parts In Play" value={new Set(flagged.map(a => a.health?.required_component || a.required_component || a.activeWorkOrder?.required_component)).size} accent="#d8a93d" />
+        <KpiCard label="Critical" value={flagged.filter(a => a.health?.risk_level === 'CRITICAL' || a.health?.risk_level === 'HIGH').length} accent={C.crit} />
+        <KpiCard label="Parts In Play" value={new Set(flagged.map(a => a.health?.required_component || a.required_component || a.activeWorkOrder?.required_component)).size} accent={C.warn} />
       </div>
 
       <StatusMsg>{msg}</StatusMsg>
@@ -65,7 +66,7 @@ export default function RecommendationsView({ onOpenAircraft, refreshKey, refres
       {flagged.length === 0 ? (
         <div className="ops-card"><Empty>No aircraft currently require a component change.</Empty></div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 8 }}>
           {flagged.map(a => (
             <RecommendationCard
               key={a.id}
@@ -115,48 +116,49 @@ function RecommendationCard({ aircraft, refreshKey, onOpen, onApprove, busy }) {
   const projectedAt = selectedImpact?.projected_at_hours ?? impact?.recommended?.projected_at_hours;
 
   return (
-    <div className="ops-card" style={{ padding: 16, borderLeft: '4px solid ' + riskColor(h.risk_level) }}>
+    <div className="ops-card ops-callout" style={{ '--callout': riskColor(h.risk_level) }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <b style={{ fontSize: 18 }}>{aircraft.id}</b>
+          <span className="ops-tile-title" style={{ fontSize: 22 }}>{aircraft.id}</span>
           {h.risk_level && <RiskBadge risk={h.risk_level} />}
-          {aircraft.activeWorkOrder && <Badge color="#4f9cf0">ACTIVE WORK ORDER</Badge>}
-          <Badge color={aircraft.status === 'AVAILABLE' ? '#3fb97f' : '#d8a93d'}>{String(aircraft.status).replace(/_/g, ' ')}</Badge>
-          <span style={{ fontSize: 12, color: '#8b94a3' }}>{baseName(aircraft.base_id)} · {aircraft.type}</span>
+          {aircraft.activeWorkOrder && <Badge color={C.info}>ACTIVE WORK ORDER</Badge>}
+          <Badge color={aircraft.status === 'AVAILABLE' ? C.ok : C.warn}>{String(aircraft.status).replace(/_/g, ' ')}</Badge>
+          <span style={{ fontSize: 12, color: C.muted }}>{baseName(aircraft.base_id)} · {aircraft.type}</span>
         </div>
-        <div style={{ fontSize: 12, color: '#8b94a3', textAlign: 'right' }}>
+        <div style={{ fontSize: 12.5, color: C.muted, textAlign: 'right', lineHeight: 1.6 }}>
           Health <b style={{ color: riskColor(h.risk_level) }}>{healthScoreText(h)}</b> · RUL <b>{rulText(h)}</b>
-          <br />needs <b style={{ color: '#d8a93d' }}>{part}</b>
-          {['human_selected', 'fixture_scenario'].includes(componentSource) ? <><br /><span style={{ color: '#8b94a3' }}>{componentSource === 'human_selected' ? 'Component selected during human triage; not an ML output.' : 'Component set for the synthetic operational scenario; not an ML output.'}</span></> : null}
+          <br />needs <b style={{ color: C.warn }}>{part}</b>
+          {['human_selected', 'fixture_scenario'].includes(componentSource) ? <><br /><span style={{ color: C.muted }}>{componentSource === 'human_selected' ? 'Component selected during human triage; not an ML output.' : 'Component set for the synthetic operational scenario; not an ML output.'}</span></> : null}
           {requiredByHours != null ? <> within <b>{requiredByHours}h</b></> : requiredByCycles != null ? <><br />Event RUL <b>{rulText({ rul: requiredByCycles, rul_unit: 'cycles' })}</b></> : null}
         </div>
       </div>
 
       {recErr ? (
-            <div style={{ marginTop: 10, fontSize: 12, color: '#e05c5c' }}>Could not load donor analysis: {recErr.message || 'request failed'}.</div>
+            <div style={{ marginTop: 10, fontSize: 12, color: C.crit }}>Could not load donor analysis: {recErr.message || 'request failed'}.</div>
       ) : !rec ? (
-        <div style={{ marginTop: 10, fontSize: 12, color: '#8b94a3' }}>
+        <div style={{ marginTop: 10, fontSize: 12, color: C.muted }}>
           {aircraft.activeWorkOrder?.active_transfer_id
             ? `Transfer ${aircraft.activeWorkOrder.active_transfer_id} is already active; continue with Logistics receipt.`
             : 'Analysing donor bases…'}
         </div>
       ) : cand.length === 0 ? (
-        <div style={{ marginTop: 12, fontSize: 13, color: '#e05c5c' }}>
+        <div style={{ marginTop: 12, fontSize: 13, color: C.crit }}>
           {infeasible.length ? `No feasible donor is available for ${part}. Review the rejected options below.` : `No base holds a serviceable ${part} — no viable donor. This aircraft will stay grounded until stock is sourced externally.`}
         </div>
       ) : (
         <>
-          <div style={{ marginTop: 12, fontSize: 15, fontWeight: 800 }}>
-            Source {part} from {baseName(rec.recommended?.donor_base || rec.recommended?.source_base || rec.recommended?.base_id)} — ETA {rec.recommended?.eta_hours}h
+          <div className="ops-action-route" style={{ marginTop: 16, fontSize: 16 }}>
+            Source <b>{part}</b> from <b>{baseName(rec.recommended?.donor_base || rec.recommended?.source_base || rec.recommended?.base_id)}</b>
+            <span className="ops-action-eta">ETA {rec.recommended?.eta_hours}h</span>
           </div>
           {rec.recommended?.reasons && (
-            <ul style={{ fontSize: 13, color: '#c6ccd6', marginTop: 8, paddingLeft: 18 }}>
+            <ul className="ops-reasons">
               {rec.recommended.reasons.map((r, i) => <li key={i}>{r}</li>)}
             </ul>
           )}
           {impact && (
-            <div style={{ marginTop: 10, padding: 10, border: '1px solid #2a3444', borderRadius: 8, fontSize: 12, color: '#8b94a3' }}>
-              <b style={{ color: '#c6ccd6' }}>Availability projection · estimate</b>
+            <div style={{ marginTop: 14, padding: '12px 14px', border: `1px solid ${C.line}`, borderRadius: 2, background: C.deck, fontSize: 12, color: C.muted, lineHeight: 1.55 }}>
+              <div className="ops-label" style={{ color: C.text2 }}>Availability projection · estimate</div>
               <div style={{ marginTop: 4 }}>
                 Current fleet availability: <b>{impact.current_fleet_availability_pct ?? '—'}%</b>
                 {projectedAvailability != null ? <> · Projected: <b>{projectedAvailability}%</b></> : null}
@@ -174,19 +176,19 @@ function RecommendationCard({ aircraft, refreshKey, onOpen, onApprove, busy }) {
               {impact.assumptions?.length ? <div style={{ marginTop: 4 }}>Assumptions: {impact.assumptions.join('; ')}</div> : null}
             </div>
           )}
-          <div style={{ marginTop: 12, overflow: 'hidden', border: '1px solid #2a3444', borderRadius: 8 }}>
-            <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+          <div className="ops-table-scroll" style={{ marginTop: 14, border: `1px solid ${C.line}`, borderRadius: 2 }}>
+            <table className="ops-table is-compact" style={{ minWidth: 560 }}>
               <thead>
-                <tr style={{ textAlign: 'left', color: '#8b94a3', fontSize: 10 }}>
-                  <th style={{ padding: 8 }}>Rank</th><th>Donor</th><th style={{ textAlign: 'right' }}>Free qty</th>
+                <tr>
+                  <th>Rank</th><th>Donor</th><th style={{ textAlign: 'right' }}>Free qty</th>
                   <th style={{ textAlign: 'right' }}>Condition</th><th style={{ textAlign: 'right' }}>Distance</th>
                   <th style={{ textAlign: 'right' }}>ETA</th><th style={{ textAlign: 'right' }}>Expected downtime</th>
                 </tr>
               </thead>
               <tbody>
                 {cand.map((c, i) => (
-                  <tr key={c.donor_base || c.source_base || c.base_id} style={{ borderTop: '1px solid #2a3444', background: i === 0 ? '#151b24' : 'transparent' }}>
-                    <td style={{ padding: 8 }}>{i === 0 ? <b style={{ color: '#d8a93d' }}>BEST</b> : '#' + (i + 1)}</td>
+                  <tr key={c.donor_base || c.source_base || c.base_id} className="ops-table-row" style={{ background: i === 0 ? `color-mix(in srgb, ${C.hud} 6%, transparent)` : undefined }}>
+                    <td className="ops-id">{i === 0 ? <b style={{ color: C.hud }}>BEST</b> : '#' + (i + 1)}</td>
                     <td>{baseName(c.donor_base || c.source_base || c.base_id)}</td>
                     <td style={{ textAlign: 'right' }}>{c.quantity_available}</td>
                     <td style={{ textAlign: 'right' }}>{c.condition_pct}%</td>
@@ -198,10 +200,10 @@ function RecommendationCard({ aircraft, refreshKey, onOpen, onApprove, busy }) {
               </tbody>
             </table>
           </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
             <ActionButton onClick={() => onOpen(aircraft.id)}>View Details</ActionButton>
             {aircraft.activeWorkOrder?.active_transfer_id ? (
-              <span style={{ alignSelf: 'center', color: '#8b94a3', fontSize: 12 }}>Transfer {aircraft.activeWorkOrder.active_transfer_id} is already active; continue with Logistics receipt.</span>
+              <span style={{ alignSelf: 'center', color: C.muted, fontSize: 12 }}>Transfer {aircraft.activeWorkOrder.active_transfer_id} is already active; continue with Logistics receipt.</span>
             ) : (
               <ActionButton primary disabled={busy} onClick={() => onApprove(aircraft)}>
                 {busy ? 'Approving…' : 'Approve Transfer'}
@@ -211,11 +213,11 @@ function RecommendationCard({ aircraft, refreshKey, onOpen, onApprove, busy }) {
         </>
       )}
       {rec && infeasible.length > 0 && (
-        <div style={{ marginTop: 12 }}>
-          <div className="ops-label" style={{ color: '#e05c5c' }}>Infeasible options · not available for approval</div>
+        <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.line}` }}>
+          <div className="ops-label" style={{ color: C.crit }}>Infeasible options · not available for approval</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
             {infeasible.map((c, i) => (
-              <div key={c.donor_base || c.source_base || i} style={{ fontSize: 12, color: '#8b94a3' }}>
+              <div key={c.donor_base || c.source_base || i} style={{ fontSize: 12, color: C.muted }}>
                 <b>{baseName(c.donor_base || c.source_base || c.base_id || 'Unknown base')}</b> — {c.reason || c.detail || 'Rejected by operational feasibility checks.'}
               </div>
             ))}

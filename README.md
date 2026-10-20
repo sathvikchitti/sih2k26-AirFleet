@@ -14,7 +14,7 @@ A deterministic proof of concept for connecting aircraft condition predictions t
 
 ## Run the FD001 demo
 
-The one-command launchers run the trained local FD001 provider with the six-case `fd001_operations` fixture. Python 3.14 was verified for the local backend install; use a virtual environment and install backend dependencies, then run `npm ci` from `frontend/` for the UI. The Dockerfile uses Python 3.12, but Docker Engine was unavailable for a container build check. The repository includes the model artifact and FD001 source files; the launcher fails clearly if required files are missing and never retrains the model. FD001 data is simulated engine history, mapped to demo aircraft IDs; it is not live aircraft telemetry.
+The one-command launchers run the trained local FD001 provider with the six-case `fd001_operations` fixture. Python 3.14 was verified for the local backend install; use a virtual environment and install backend dependencies, then run `npm ci` from `frontend/` for the UI. The Dockerfile uses Python 3.12; the security verification report records its container build and smoke checks. The repository includes the model artifact and FD001 source files; the launcher fails clearly if required files are missing and never retrains the model. FD001 data is simulated engine history, mapped to demo aircraft IDs; it is not live aircraft telemetry.
 
 On Windows, create and activate an isolated backend environment from the repository root:
 
@@ -49,15 +49,16 @@ The same demo can run in Docker when Docker Engine and Compose are installed:
 docker compose up --build
 ```
 
-Compose binds both services to loopback. To avoid occupied default ports, set `DEMO_BACKEND_PORT` and `DEMO_FRONTEND_PORT` in the environment before `docker compose up --build` (for example `8011` and `5179`); Compose fails without stopping any process if a requested port is busy. The backend image copies the existing model artifact and local `CMAPSSData` into the image. Use `docker compose down` to stop the containers you started. The backend reset control is enabled for this local demo, so do not expose it to a shared or public network.
+Compose binds both services to loopback and now uses restricted evaluator access with reset disabled. Configure `DEMO_BASIC_USERS` and `FRONTEND_ORIGINS` as described below before starting; without accounts the API stays locked. To avoid occupied default ports, set `DEMO_BACKEND_PORT` and `DEMO_FRONTEND_PORT` in the environment before `docker compose up --build` (for example `8011` and `5179`). The backend image copies the existing model artifact and local `CMAPSSData`. Use `docker compose down` to stop only the containers you started.
 
-**Docker not verified.** The Docker CLI is installed, but `docker info` cannot connect to the Docker Desktop Linux engine on this host. The image build and Compose startup instructions above have not been exercised here.
+See `docs/security-hardening-verification.md` for the current build and deployment verification results.
 
 The launchers require already-installed dependencies. For the manual development workflow, the backend uses FastAPI and in-memory repositories, while the frontend uses React and Vite:
 
 ```powershell
 cd backend
 pip install -r requirements.txt
+$env:DEMO_ACCESS_MODE = 'local'
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -81,7 +82,7 @@ export VITE_API_BASE=
 npm run dev
 ```
 
-The Commander can restore the deterministic seed through **Reset demo** or `POST /api/demo/reset`. Reset is intended for demonstrations and development, not shared production use.
+Reset is off by default. Explicitly enable it with `.\run_demo.ps1 -EnableReset` or `DEMO_RESET_ENABLED=true ./run_demo.sh`; the Commander can then use **Reset demo** or `POST /api/demo/reset`. For manual local startup, set `DEMO_RESET_ENABLED=true` explicitly. Local mode is for loopback demonstrations only; never publish Vite or a local-mode backend.
 
 ## Verification
 
@@ -93,7 +94,7 @@ python -m pytest tests/test_fd001_model.py tests/test_fd001_provider.py tests/te
 python -m app.evaluation.recommendation_baseline
 ```
 
-The legacy API compatibility script expects the backend to be running at `http://127.0.0.1:8000`. It uses headerless legacy mutations, so start that test server with `DEMO_PERMISSION_MODE=compat` and `DEMO_RESET_ENABLED=true`; production-like verification should leave hardened mode enabled and use the permission regression suite instead:
+The legacy API compatibility script expects a disposable mock backend at `http://127.0.0.1:8000`. It uses headerless legacy mutations: explicitly set `DEMO_ACCESS_MODE=local`, `ML_PROVIDER=mock`, `DEMO_PERMISSION_MODE=compat`, `DEMO_RESET_ENABLED=true`, and leave `DEMO_SCENARIO` unset for that isolated loopback server. Restricted deployments reject compat mode. Run security tests against restricted mode instead:
 
 ```powershell
 python tests/test_api_compat.py
@@ -200,13 +201,58 @@ Maintenance start reserves one transferable component for that work order. Compl
 
 All application state is in memory and resets on restart. There is no database, migration, or restart persistence. The repository interfaces provide a future persistence boundary, but PostgreSQL/SQLAlchemy remain planned work.
 
-## Demo permissions and security limits
+## Evaluator access and deployment security
 
-The UI sends `X-Demo-Role` with `commander`, `base`, or `logistics`; Base Manager actions also send `X-Demo-Base` with the selected base. The backend checks the requested capability, validates any supplied base against the known bases, and ensures Base Manager actions target that base. `DEMO_PERMISSION_MODE` defaults to `hardened`: every protected mutation requires an explicit role header, Base Manager mutations require a matching base header, and legacy actor/body/query values cannot replace a supplied role header. `DEMO_PERMISSION_MODE=compat` is an explicit migration option for older headerless clients and restores their actor/default-role fallback; do not use it as a production security setting. `POST /api/demo/reset` is disabled unless `DEMO_RESET_ENABLED=true` is explicitly set, in either mode.
+`DEMO_ACCESS_MODE` defaults to `restricted`. Standard HTTP Basic authentication gates all application routes, including reads, mutations, `/docs`, and `/openapi.json`. Only `/livez` (a minimal liveness response) and CORS preflights are public. Without configured accounts the API returns 503; missing, malformed, or incorrect credentials return a generic 401 challenge. Password comparison follows the [FastAPI HTTP Basic guidance](https://fastapi.tiangolo.com/advanced/security/http-basic-auth/).
 
-These values remain demo role claims supplied by the caller; anyone can choose a role or base. They are not authenticated identities or production authorization. The API does not enforce read authorization. Production use requires authenticated users, server-verified role and base assignments, server-side authorization for reads and writes, deployment-specific CORS settings, and persistent transactional storage. The demo reset intentionally reinitializes in-memory data and clears prior operational and audit history before recording its reset event.
+`DEMO_BASIC_USERS` is a **backend-only** JSON object mapping usernames to `{ "password": "<unique random password of at least 20 ASCII characters>", "role": "commander|base|logistics", "base": "alpha" }`. `base` is required only for a Base Manager account and must be a known base. Use a unique random password per account, distribute it privately, and remove the accounts after evaluation. Keep this variable in your host's secret configuration; never in Git, frontend `.env`, `VITE_*`, image build arguments, URLs, or screenshots. Do not publish `docker compose config` output containing interpolated secrets.
 
-The capability matrix is available from `GET /api/audit/permissions`. Commander approval, Base Manager maintenance/resource actions, and Logistics inventory/transfer actions are enforced on state-changing routes. Reset requires an explicit Commander role claim and the independent reset-enable setting.
+In restricted mode the middleware discards every incoming `X-Demo-Role` and `X-Demo-Base` value and supplies the authenticated account's role/base to the existing permission checks. UI role selection cannot grant privileges. Body and query actors cannot override the account. Commander approves recommendations, Base Manager handles maintenance within its assigned base, and Logistics manages inventory/transfers. All authenticated evaluator accounts can read the synthetic fleet across bases; per-base read confidentiality is outside this demo's scope.
+
+`DEMO_ACCESS_MODE=local` explicitly retains caller-selected demo roles for loopback development. `X-Demo-Role` alone is **not production authentication**. `DEMO_PERMISSION_MODE` defaults to `hardened`; `compat` is allowed only in local mode for isolated legacy tests. The launchers bind loopback and refuse an explicitly restricted access mode rather than silently downgrading it. Do not run them as hosted launchers. On Bash, use `export DEMO_ACCESS_MODE=local` for manual development; PowerShell uses `$env:DEMO_ACCESS_MODE='local'`.
+
+`DEMO_RESET_ENABLED` defaults to false in the backend, Docker image, Compose, and launchers. Local reset requires `.\run_demo.ps1 -EnableReset` or `DEMO_RESET_ENABLED=true ./run_demo.sh` plus the Commander demo role. Restricted reset, if deliberately enabled outside the supplied Compose configuration, also requires authenticated Commander credentials. Reset erases the previous operational/audit history before recording the reset event. Hosted Compose fixes reset to false.
+
+To run the restricted evaluator deployment:
+
+1. Install Docker Engine/Compose on the host. Keep ports 8000 and 5173 private. Use one backend process because storage and locking are in memory.
+2. Set `DEMO_BASIC_USERS` in the server environment, with separate accounts for the roles you need. A PowerShell setup that prompts without printing passwords is:
+
+   ```powershell
+   $env:DEMO_BASIC_USERS = @{
+     evaluatorCommander = @{ password = (Read-Host 'Commander random password (20+ ASCII chars)' -MaskInput); role = 'commander' }
+     evaluatorAlpha = @{ password = (Read-Host 'Alpha random password (20+ ASCII chars)' -MaskInput); role = 'base'; base = 'alpha' }
+     evaluatorLogistics = @{ password = (Read-Host 'Logistics random password (20+ ASCII chars)' -MaskInput); role = 'logistics' }
+   } | ConvertTo-Json -Compress
+   $env:FRONTEND_ORIGINS = 'https://evaluator.example.org'
+   docker compose up --build -d
+   ```
+
+   Replace the hostname with your actual HTTPS origin (no trailing slash). On Linux, inject the same JSON via your host's secret manager/environment and set `FRONTEND_ORIGINS` before the same Compose command. For a loopback-only restricted rehearsal, use `http://localhost:5173,http://127.0.0.1:5173` instead.
+3. Put an existing HTTPS reverse proxy in front of **only** `127.0.0.1:5173`, preserve `Host` and `Authorization`, and restrict evaluator source IPs or require a VPN. For example, adapt this host Nginx server block with your real certificate paths and evaluator IP; do not expose the internal HTTP ports:
+
+   ```nginx
+   server {
+       listen 443 ssl;
+       server_name evaluator.example.org;
+       ssl_certificate /etc/letsencrypt/live/evaluator.example.org/fullchain.pem;
+       ssl_certificate_key /etc/letsencrypt/live/evaluator.example.org/privkey.pem;
+       allow 203.0.113.10; # replace with the evaluator's actual public IP
+       deny all;
+       location / {
+           proxy_pass http://127.0.0.1:5173;
+           proxy_set_header Host $host;
+           proxy_set_header Authorization $http_authorization;
+       }
+   }
+   ```
+
+4. Visit `https://evaluator.example.org/login` to get the browser's Basic login prompt and redirect to the application. Choose the UI view matching the account. To test another role, use a fresh browser profile/private session (Basic has no application logout). The bundled Nginx forwards `/login` and `/api/` to the backend; `VITE_API_BASE` remains empty and no credential enters the client bundle.
+5. Verify `/livez` on the private backend returns 200, an unauthenticated `/api/aircraft` returns 401, credentials allow reads, spoofed role headers cannot elevate a Logistics account, and authenticated Commander reset returns 403. Run `python -m pytest tests/test_evaluator_access.py -q` from `backend/` for executable security/workflow checks. Check `docker compose ps` for health. Shut down with `docker compose down` after evaluation and revoke credentials.
+
+`FRONTEND_ORIGINS` has no allowed origins by default in restricted mode; wildcards are rejected. It lists exact trusted browser origins, including the public same-origin proxy URL because browser mutations are checked against it to prevent cross-site requests with cached Basic credentials. CORS remains non-credentialed; use the same-origin proxy for browser Basic access. For separate frontend/backend hosts, prefer proxying `/api` through the frontend origin rather than configuring cross-origin browser credentials. Origin-less CLI requests still require authentication. CORS is not an authentication boundary.
+
+This is time-limited evaluator access, not a production identity platform: no MFA, account recovery, application logout, password hashing at rest, or application rate limiting. Server environment/container administrators can inspect the configured passwords. HTTPS and an evaluator IP restriction/VPN are required for hosting; never send Basic credentials over public HTTP. Public static assets still contain synthetic fallback fixtures; protect the entire frontend at the edge if even those should be private. Use synthetic data only. TLS/edge certificate provisioning must be verified on your actual host before sharing a URL; otherwise keep the deployment private. State resets on restart and cannot safely span multiple workers. The proof of concept is not certified or suitable for operational military decisions.
 
 ## Recommendation policy evaluation
 

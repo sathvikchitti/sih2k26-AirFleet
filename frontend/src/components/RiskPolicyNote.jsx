@@ -1,5 +1,6 @@
 import React from 'react';
 import { api } from '../services/api.js';
+import { C } from '../theme.js';
 
 const isFiniteNumber = value => typeof value === 'number' && Number.isFinite(value);
 
@@ -10,7 +11,7 @@ export function RiskPolicyDetails({ policy }) {
   const hasFormula = typeof fd001?.health_score_formula === 'string' && fd001.health_score_formula.length > 0;
   const hasCap = isFiniteNumber(fd001?.rul_cap_cycles);
   return (
-    <div style={{ fontSize: 11, color: '#aeb6c3', lineHeight: 1.5, marginTop: 7 }}>
+    <div style={{ fontSize: 11, color: C.text2, lineHeight: 1.5, marginTop: 7 }}>
       {hasFormula && hasCap ? <div>FD001 health score: <b>{fd001.health_score_formula}</b> · RUL cap {fd001.rul_cap_cycles} cycles.</div> : null}
       <div style={{ marginTop: 5 }}>Backend health-score risk bands{policy?.combination?.rule ? ` · combination: ${policy.combination.rule.replace(/_/g, ' ')}` : ''}:</div>
       {hasThresholds ? (
@@ -50,10 +51,10 @@ export default function RiskPolicyNote({ refreshKey = 0 }) {
   }, [refreshKey]);
 
   return (
-    <details style={{ marginTop: 8, color: '#8b94a3' }}>
-      <summary style={{ cursor: 'pointer', fontSize: 11, color: '#d8a93d' }}>How backend risk bands are assigned</summary>
+    <details style={{ marginTop: 8, color: C.muted }}>
+      <summary style={{ cursor: 'pointer', fontSize: 11, color: C.warn }}>How backend risk bands are assigned</summary>
       {loading && !policy ? <div role="status" style={{ fontSize: 11, marginTop: 6 }}>Loading backend risk policy…</div> : null}
-      {error ? <div role="status" style={{ fontSize: 11, color: '#e05c5c', marginTop: 6 }}>Backend risk policy unavailable; threshold values are withheld.</div> : null}
+      {error ? <div role="status" style={{ fontSize: 11, color: C.crit, marginTop: 6 }}>Backend risk policy unavailable; threshold values are withheld.</div> : null}
       {policy ? <RiskPolicyDetails policy={policy} /> : null}
     </details>
   );

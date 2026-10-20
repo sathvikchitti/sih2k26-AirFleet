@@ -1,23 +1,48 @@
 import React from 'react';
+import { C } from '../theme.js';
+import { AXIS_FONT, ChartTooltip, TipRow, useMeasuredWidth, useNearestIndex } from './charts.jsx';
 
 export function riskColor(risk) {
-  if (risk === 'CRITICAL') return '#e05c5c';
-  if (risk === 'HIGH') return '#e05c5c';
-  if (risk === 'MEDIUM') return '#d8a93d';
-  return '#3fb97f';
+  if (risk === 'CRITICAL') return C.crit;
+  if (risk === 'HIGH') return C.crit;
+  if (risk === 'MEDIUM') return C.warn;
+  return C.ok;
 }
+
+// One colour language for every status the app shows: aircraft, inventory
+// lines, transfers and work orders.
+const STATUS_COLOR = {
+  AVAILABLE: C.ok, RECEIVED: C.ok, COMPLETED: C.ok, SERVICEABLE: C.ok, COVERED: C.ok,
+  AT_RISK: C.crit, WAITING_FOR_PART: C.crit, UNAVAILABLE: C.crit, STOCKOUT: C.crit,
+  WAITING_FOR_COMPONENT: C.crit, REJECTED: C.crit, SHORTAGE: C.crit,
+  DEGRADED: C.warn, LOW_STOCK: C.warn, PENDING_APPROVAL: C.warn, AWAITING_DELIVERY: C.warn, RESERVED: C.warn,
+  MAINTENANCE: C.info, IN_TRANSIT: C.info, IN_PROGRESS: C.info, READY_TO_START: C.info, APPROVED: C.info,
+  SCHEDULED: C.muted, NOT_STOCKED: C.dim, CANCELLED: C.dim, CANCELED: C.dim,
+};
 
 export function statusColor(status) {
-  if (status === 'AVAILABLE') return '#3fb97f';
-  if (status === 'AT_RISK') return '#e05c5c';
-  if (status === 'DEGRADED') return '#d8a93d';
-  if (status === 'MAINTENANCE') return '#4f9cf0';
-  return '#8b94a3';
+  return STATUS_COLOR[String(status || '').toUpperCase()] || C.muted;
 }
 
-export function Badge({ children, color }) {
+// Work-order priority: CRITICAL/HIGH are alarms, MEDIUM is caution, the rest neutral.
+export function priorityColor(priority) {
+  const p = String(priority || '').toUpperCase();
+  if (p === 'CRITICAL' || p === 'HIGH' || p === 'URGENT') return C.crit;
+  if (p === 'MEDIUM') return C.warn;
+  return C.muted;
+}
+
+// Annunciator-style badge: square lamp + caption, tinted by `color`.
+export function Badge({ children, color = C.muted }) {
   return (
-    <span className="ops-badge" style={{ background: color + '22', color, border: `1px solid ${color}55` }}>
+    <span
+      className="ops-badge"
+      style={{
+        color,
+        background: `color-mix(in srgb, ${color} 10%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${color} 38%, transparent)`,
+      }}
+    >
       {children}
     </span>
   );
@@ -25,50 +50,103 @@ export function Badge({ children, color }) {
 
 export function KpiCard({ label, value, sub, accent }) {
   return (
-    <div className="ops-card ops-kpi-card">
+    <div className="ops-kpi-card" style={accent ? { '--kpi-accent': accent } : undefined}>
       <div className="ops-label">{label}</div>
-      <div style={{ fontSize: 30, fontWeight: 800, marginTop: 4, color: accent || '#e6e9ee' }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: '#8b94a3', marginTop: 4 }}>{sub}</div>}
+      <div className="ops-kpi-value" style={accent ? { color: accent } : undefined}>{value}</div>
+      {sub && <div className="ops-kpi-sub">{sub}</div>}
     </div>
   );
 }
 
+// Segmented meter: the fill carries severity, the unfilled track is a faint
+// step of the same colour, segments read like a HUD tape.
 export function HealthBar({ score }) {
-  const c = score < 60 ? '#e05c5c' : score < 80 ? '#d8a93d' : '#3fb97f';
+  const c = score < 60 ? C.crit : score < 80 ? C.warn : C.ok;
+  const pct = Math.max(0, Math.min(100, Number(score) || 0));
   return (
-    <div style={{ background: '#0a0e13', borderRadius: 6, height: 8, overflow: 'hidden', border: '1px solid #2a3444' }}>
-      <div style={{ width: score + '%', height: '100%', background: c }} />
+    <div className="ops-health-bar" role="img" aria-label={`Health ${score}%`} style={{ background: `color-mix(in srgb, ${c} 14%, transparent)` }}>
+      <div style={{ width: pct + '%', background: c }} />
     </div>
   );
 }
 
-// Simple illustrative degradation trend (POC) — not sensor data.
-export function HealthChart({ trend, caption = 'illustrative trend' }) {
-  if (!trend || !trend.length) return null;
-  const w = 420, h = 110, pad = 12;
-  const min = Math.min(...trend) - 5, max = Math.max(...trend) + 5;
-  const pts = trend.map((v, i) => {
-    const x = pad + (i / (trend.length - 1)) * (w - pad * 2);
-    const y = h - pad - ((v - min) / (max - min)) * (h - pad * 2);
-    return [x, y, v];
-  });
-  const d = pts.map((p, i) => (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
-  const last = pts[pts.length - 1];
-  const col = last[2] < 60 ? '#e05c5c' : last[2] < 80 ? '#d8a93d' : '#3fb97f';
+// Inline readout for table cells: value plus a short segmented bar.
+export function MiniMeter({ pct, color = C.ok }) {
+  const v = Number.isFinite(Number(pct)) ? Math.max(0, Math.min(100, Number(pct))) : null;
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 130, background: '#0a0e13', border: '1px solid #2a3444', borderRadius: 8 }}>
-      <path d={d} fill="none" stroke={col} strokeWidth="2.5" />
-      {pts.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r="3" fill={col} opacity={i === pts.length - 1 ? 1 : 0.45} />)}
-      <text x={last[0] - 34} y={last[1] - 10} fill={col} fontSize="13" fontWeight="800">{last[2]}%</text>
-      <text x={pad} y={h - 2} fill="#8b94a3" fontSize="9">Sample order · {caption}</text>
-    </svg>
+    <span className="ops-mini-meter">
+      <span className="ops-mini-meter-track" style={{ background: `color-mix(in srgb, ${color} 16%, transparent)` }}>
+        {v != null && <span style={{ width: v + '%', background: color }} />}
+      </span>
+      <b style={{ color: v == null ? C.muted : C.text }}>{v == null ? '—' : `${pct}%`}</b>
+    </span>
+  );
+}
+
+// Health trend with the backend risk bands shaded behind the line.
+export function HealthChart({ trend, caption = 'illustrative trend' }) {
+  const values = (trend || []).map(Number).filter(Number.isFinite);
+  const [frameRef, measured] = useMeasuredWidth(520);
+  const width = Math.max(280, measured), height = 200, left = 36, right = 52, top = 12, bottom = 26;
+  const x = i => left + (values.length > 1 ? i / (values.length - 1) : 0.5) * (width - left - right);
+  const y = v => top + (1 - Math.max(0, Math.min(100, v)) / 100) * (height - top - bottom);
+  const xs = values.map((_, i) => x(i));
+  const [hover, onMove, onLeave] = useNearestIndex(xs, width);
+  const gradId = React.useId().replace(/:/g, '');
+  if (!values.length) return null;
+  const last = values[values.length - 1];
+  const col = last < 60 ? C.crit : last < 80 ? C.warn : C.ok;
+  const line = values.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(' ');
+  const area = `${line} L${x(values.length - 1).toFixed(1)} ${y(0)} L${x(0).toFixed(1)} ${y(0)} Z`;
+  return (
+    <div className="ops-chart-frame" ref={frameRef}>
+      <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height} className="ops-chart-svg ops-chart-well" role="img" aria-label={`Health trend over ${values.length} samples, latest ${last}%`}>
+        <defs>
+          <linearGradient id={gradId} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stopColor={col} stopOpacity="0.12" />
+            <stop offset="1" stopColor={col} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <rect x={left} y={y(60)} width={width - left - right} height={y(0) - y(60)} fill={C.crit} opacity="0.06" />
+        <rect x={left} y={y(80)} width={width - left - right} height={y(60) - y(80)} fill={C.warn} opacity="0.05" />
+        {[0, 20, 40, 60, 80, 100].map(t => (
+          <g key={t}>
+            <line x1={left} x2={width - right} y1={y(t)} y2={y(t)} stroke={C.line} />
+            <text x={left - 8} y={y(t) + 3} textAnchor="end" fill={t === 60 || t === 80 ? C.text2 : C.muted} {...AXIS_FONT}>{t}</text>
+          </g>
+        ))}
+        <path d={area} fill={`url(#${gradId})`} />
+        <path d={line} fill="none" stroke={col} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        <circle cx={x(values.length - 1)} cy={y(last)} r="4.5" fill={col} stroke={C.deck} strokeWidth="2" />
+        <text x={x(values.length - 1) + 10} y={y(last) + 4} fill={C.text} fontFamily="var(--font-mono)" fontSize="12" fontWeight="700">{last}%</text>
+        <text x={left} y={height - 8} fill={C.muted} {...AXIS_FONT}>Sample 1</text>
+        <text x={width - right} y={height - 8} textAnchor="end" fill={C.muted} {...AXIS_FONT}>Sample {values.length} · {caption}</text>
+        {hover != null && (
+          <g pointerEvents="none">
+            <line x1={x(hover)} x2={x(hover)} y1={top} y2={y(0)} stroke={C.text2} />
+            <circle cx={x(hover)} cy={y(values[hover])} r="4.5" fill={col} stroke={C.deck} strokeWidth="2" />
+          </g>
+        )}
+        <rect x={left} y={top} width={width - left - right} height={y(0) - top} fill="transparent" onMouseMove={onMove} onMouseLeave={onLeave} />
+      </svg>
+      {hover != null && (
+        <ChartTooltip xPct={(x(hover) / width) * 100}>
+          <div className="ops-chart-tip-title">Sample {hover + 1}</div>
+          <TipRow color={col} label="Health" value={`${values[hover]}%`} />
+        </ChartTooltip>
+      )}
+      <div className="ops-legend" style={{ marginTop: 8 }}>
+        <span className="ops-legend-item"><span className="ops-swatch" style={{ background: C.crit, opacity: 0.5 }} />Below 60 · high risk (default bands)</span>
+        <span className="ops-legend-item"><span className="ops-swatch" style={{ background: C.warn, opacity: 0.5 }} />60–80 · medium risk</span>
+      </div>
+    </div>
   );
 }
 
 export function SectionTitle({ children, right }) {
   return (
     <div className="ops-section-title">
-      <div className="ops-label ops-section-label">{children}</div>
+      <h3 className="ops-section-label">{children}</h3>
       {right}
     </div>
   );
@@ -87,16 +165,16 @@ export function PageHeader({ title, subtitle, right }) {
 }
 
 export function Empty({ children = 'Nothing to show.' }) {
-  return <div style={{ padding: 18, fontSize: 13, color: '#8b94a3', textAlign: 'center' }}>{children}</div>;
+  return <div className="ops-empty">{children}</div>;
 }
 
 export function Loading({ children = 'Loading…' }) {
-  return <div style={{ padding: 18, fontSize: 13, color: '#8b94a3' }}>{children}</div>;
+  return <div className="ops-loading" role="status">{children}</div>;
 }
 
 export function DataError({ error, children = 'Data unavailable.' }) {
   return (
-    <div role="alert" className="ops-card" style={{ padding: 16, color: '#e05c5c', fontSize: 13 }}>
+    <div role="alert" className="ops-card ops-callout" style={{ '--callout': C.crit, padding: '14px 18px', color: C.crit, fontSize: 13 }}>
       {children}{error?.message ? <> {error.message}</> : null}
     </div>
   );
@@ -109,9 +187,9 @@ export function Table({ columns, rows, rowKey, empty, onRowClick, minWidth }) {
     <div className="ops-card ops-table-scroll">
       <table className="ops-table" style={minWidth ? { minWidth } : undefined}>
         <thead className="ops-table-head">
-          <tr style={{ textAlign: 'left', color: '#8b94a3', fontSize: 11 }}>
+          <tr>
             {columns.map(c => (
-              <th key={c.key} style={{ width: c.width, textAlign: c.align || 'left', whiteSpace: 'nowrap' }}>{c.label}</th>
+              <th key={c.key} style={{ width: c.width, textAlign: c.align || 'left' }}>{c.label}</th>
             ))}
           </tr>
         </thead>
@@ -121,10 +199,9 @@ export function Table({ columns, rows, rowKey, empty, onRowClick, minWidth }) {
               key={rowKey ? r[rowKey] : i}
               onClick={onRowClick ? () => onRowClick(r) : undefined}
               className={onRowClick ? 'ops-table-row is-clickable' : 'ops-table-row'}
-              style={{ cursor: onRowClick ? 'pointer' : 'default' }}
             >
               {columns.map(c => (
-                <td key={c.key} style={{ textAlign: c.align || 'left' }}>
+                <td key={c.key} className={c.mono ? 'ops-id' : undefined} style={{ textAlign: c.align || 'left', whiteSpace: c.nowrap ? 'nowrap' : undefined }}>
                   {c.render ? c.render(r) : r[c.key]}
                 </td>
               ))}
@@ -136,10 +213,11 @@ export function Table({ columns, rows, rowKey, empty, onRowClick, minWidth }) {
   );
 }
 
-// Text input / select styled to match the dark ops theme.
+// Text input / select styled to match the theme (for controls that can't use
+// the .ops-control class).
 export const inputStyle = {
-  background: '#151b24', color: '#e6e9ee', border: '1px solid #2a3444',
-  borderRadius: 6, padding: '6px 9px', fontSize: 13,
+  background: C.deck, color: C.text, border: `1px solid ${C.line2}`,
+  borderRadius: 2, padding: '6px 9px', fontSize: 13,
 };
 
 export function SearchInput({ value, onChange, placeholder }) {
@@ -149,13 +227,14 @@ export function SearchInput({ value, onChange, placeholder }) {
       value={value}
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
+      aria-label={placeholder}
     />
   );
 }
 
 export function Select({ value, onChange, options, label, id, required }) {
   return (
-    <select id={id} required={required} className="ops-control" value={value} onChange={e => onChange(e.target.value)}>
+    <select id={id} required={required} className="ops-control" value={value} onChange={e => onChange(e.target.value)} aria-label={label}>
       {label && <option value="">{label}</option>}
       {options.map(o => (
         <option key={o.value} value={o.value}>{o.label}</option>
@@ -166,18 +245,13 @@ export function Select({ value, onChange, options, label, id, required }) {
 
 // `type` defaults to "button" so a button placed inside a <form> never
 // triggers an implicit submit alongside its own onClick.
-export function ActionButton({ children, onClick, primary, disabled, small, type = 'button' }) {
+export function ActionButton({ children, onClick, primary, quiet, disabled, small, type = 'button' }) {
   return (
     <button
-      className={`ops-button${primary ? ' is-primary' : ''}${small ? ' is-small' : ''}`}
+      className={`ops-button${primary ? ' is-primary' : ''}${quiet ? ' is-quiet' : ''}${small ? ' is-small' : ''}`}
       type={type}
       onClick={onClick}
       disabled={disabled}
-      style={
-        primary
-          ? { background: disabled ? '#6b5a2a' : '#d8a93d', border: 'none', color: '#111', fontWeight: 800, borderRadius: 7, padding: small ? '4px 10px' : '8px 14px', cursor: disabled ? 'default' : 'pointer', fontSize: small ? 12 : 13 }
-          : { background: '#1c2431', border: '1px solid #2a3444', color: '#e6e9ee', borderRadius: 7, padding: small ? '4px 10px' : '8px 14px', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1, fontSize: small ? 12 : 13 }
-      }
     >
       {children}
     </button>
@@ -186,7 +260,7 @@ export function ActionButton({ children, onClick, primary, disabled, small, type
 
 export function StatusMsg({ children }) {
   if (!children) return null;
-  return <div style={{ marginTop: 10, fontSize: 13, color: '#d8a93d' }}>{children}</div>;
+  return <div className="ops-status-msg" role="status">{children}</div>;
 }
 
 export function RiskBadge({ risk }) {

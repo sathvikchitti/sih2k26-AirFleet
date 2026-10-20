@@ -33,3 +33,4 @@ frontend/dist-render-check/
 !.env.example
 !.env.*.example
 .venv/
+hf-space/
